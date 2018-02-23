@@ -1,6 +1,8 @@
 KMailBox
 ========
 
+![mailbox](imgs/mailbox-icon.png)
+
 Python 邮件模块
 
 

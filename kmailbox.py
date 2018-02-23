@@ -15,11 +15,11 @@ import mimetypes
 import smtplib
 import logging
 from email import encoders
-from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.mime.audio import MIMEAudio
-from email.mime.base import MIMEBase
+from email.mime.multipart import MIMEMultipart
 
 
 log = logging.getLogger(__name__)
@@ -27,6 +27,7 @@ log.addHandler(logging.NullHandler())
 
 
 class Message(object):
+    """邮件消息"""
 
     def __init__(self, sender=None, recipient=None, subject=None, content=None,
                  is_html=False, attachments=None, charset="utf-8"):
@@ -106,7 +107,7 @@ class Message(object):
 
 
 class MailBox(object):
-    '''发送邮件'''
+    """邮件收发"""
 
     def __init__(self, imap_host=None, smtp_host=None):
         self.imap_host = imap_host  # 接收服务器
@@ -115,6 +116,8 @@ class MailBox(object):
         self.username = None  # 邮箱账号
         self.password = None  # 邮箱密码
 
+        self._imap = None
+
     def login(self, username, password):
         self.username = username
         self.password = password
@@ -122,8 +125,23 @@ class MailBox(object):
         if not self.imap_host:
             return
 
+        self._imap = imaplib.IMAP4_SSL(self.imap_host)
+        typ, data = self._imap.login(self.username, self.password)
+        if typ != 'OK':
+            raise Exception(data)
+        log.info("Sign as '%s'", data)
+
     def logout(self):
-        pass
+        self.username = None
+        self.password = None
+
+        if not self._imap:
+            return
+
+        typ, data = self._imap.logout()
+        if typ != 'BYE':
+            raise Exception(data)
+        log.info("Sign as '%s'", data)
 
     def sendmail(self, message=None):
         server = smtplib.SMTP()
@@ -134,10 +152,48 @@ class MailBox(object):
         log.info("Sending email...")
         server.sendmail(message.sender, message.recipient, message.as_string())
         log.info("Send mail is successful")
-        server.close()
+        server.quit()
 
     def list(self):
+        typ, data = self._imap.list()
+        if typ != "OK":
+            raise Exception(data)
+        return data
+
+    def select(self, box="INBOX"):
+        typ, data = self.mail.select(box)
+        if typ != "OK":
+            raise Exception(data)
+        return data
+
+    def get_unread(self):
+        type, data = self.search(None, "Unseen")
+        if typ != "OK":
+            raise Exception(data)
+        return [self.get_mail_message(num) for num in data[0].split(' ')]
+
+    def get_mail_message(self, num):
+        typ, data = m.fetch(num, '(RFC822)')
+        if typ != "OK":
+            raise Exception(data)
+        raw_mail = data[0][1]
+        return email.message_from_string(raw_mail)
+
+    def get_message_content(self, msg):
         pass
+
+    def get_message_sender(self, msg):
+        pass
+
+    def get_message_recipient(self, msg):
+        pass
+
+    def get_message_subject(self, msg):
+        email.Header.decode_header(msg['Subject'])[0][0]
+
+    def get_message_attachments(self, msg):
+        pass
+
 
 
 # Script starts from here
