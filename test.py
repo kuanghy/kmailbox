@@ -6,6 +6,9 @@
 # CreateTime: 2018-02-12 17:40:18
 
 import os
+import sys
+import logging
+from pprint import pprint
 from kmailbox import Message, MailBox
 
 try:
@@ -28,15 +31,55 @@ html_content = '''\
 '''
 
 
+class TestMessage(object):
+
+    def test_property(self):
+        msg = Message()
+        assert msg.sender is None
+        msg.sender = "hello@email.com"
+        assert msg.sender == "hello@email.com"
+
+        msg.recipient = "to@email.com"
+        msg.cc_recipient = "cc@email.com"
+        assert len(msg.to_addrs) == 2
+
+    def test_as_string(self):
+        msg = Message()
+        msg.sender = "Test<test@email.com>"
+        msg.recipient = "to@email.com"
+        msg.reply_recipient = "reply@email.com"
+        msg.content = "This is Test"
+        msg_str = msg.as_string()
+        print(msg_str)
+        assert msg_str
+
+
 class TestMailBox(object):
 
     def setup_class(cls):
-        # cls.mailbox = MailBox(imap_host="imap.yeah.net", smtp_host="smtp.yeah.net")
-        cls.mailbox = MailBox(smtp_host="smtp.yeah.net")
-        cls.mailbox.login(os.environ["MAIL_USER"], os.environ["MAIL_PASSWD"])
+        logger = logging.getLogger("kmailbox")
+        logger.setLevel(logging.DEBUG)
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter(
+            "%(levelname)s - %(asctime)s - %(message)s"
+        ))
+        logger.addHandler(handler)
+        logger.propagate = False
+
+        cls.mailbox = MailBox(
+            imap_host=os.getenv("KMAILBOX_IMAP_HOST"),
+            smtp_host=os.getenv("KMAILBOX_SMTP_HOST"),
+            logger=logger,
+        )
+        cls.mailuser = os.environ["KMAILBOX_USER"]
+        cls.mailbox.login(
+            cls.mailuser,
+            os.environ["KMAILBOX_PASSWD"]
+        )
 
         cls.msg = Message()
-        cls.msg.sender = "KMailBox<konitor@yeah.net>"
+        cls.msg.sender = "KMailBox<{}>".format(cls.mailuser)
         cls.msg.recipient = "huayongkuang@qq.com"
 
     def test_sendmail(self):
@@ -61,3 +104,25 @@ class TestMailBox(object):
                                 "cid1:imgs/20171005170550.jpg",
                                 "kmailbox.py", "README.md"]
         self.mailbox.send(self.msg)
+
+    def test_imap(self):
+        print(self.mailbox.folders)
+        self.mailbox.select()
+        # print(self.mailbox.select("垃圾邮"))
+        # mails = self.mailbox.all(mark_seen=False)
+        # mails = self.mailbox.unread(mark_seen=False)
+        mails = self.mailbox.new(mark_seen=False)
+        print(mails)
+        pprint([{
+            "uid": mail.uid,
+            "sender": mail.sender,
+            "to_addrs": mail.to_addrs,
+            "subject": mail.subject,
+            "date": str(mail.date),
+            "flags": mail.flags,
+            "attachments": [att.filename for att in mail.attachments],
+        } for mail in mails])
+        # print(mails[0].content)
+        # for part in mails[0]._msg.walk():
+        #     print(part)
+        self.mailbox.logout()

@@ -108,5 +108,7 @@ mailbox.send(msg)
 ## 参考
 
 - [https://github.com/awangga/outlook](https://github.com/awangga/outlook)
+- [https://github.com/ikvk/imap_tools](https://github.com/ikvk/imap_tools)
 - [https://bitbucket.org/ginstrom/mailer/overview](https://bitbucket.org/ginstrom/mailer/overview)
+- [https://github.com/martinrusev/imbox](https://github.com/martinrusev/imbox)
 - [https://gist.github.com/nickoala/569a9d191d088d82a5ef5c03c0690a02](https://gist.github.com/nickoala/569a9d191d088d82a5ef5c03c0690a02)
