@@ -12,6 +12,7 @@ import base64
 import logging
 import binascii
 import datetime
+import functools
 from collections import namedtuple, UserString
 
 import imaplib
@@ -35,6 +36,9 @@ if sys.version_info.major > 2:
 else:
     string_types = basestring
     binary_type = str
+
+if 'ID' not in imaplib.Commands:
+    imaplib.Commands['ID'] = ('AUTH', 'NONAUTH')
 
 
 def _decode_string(data, encoding="uft-8"):
@@ -194,7 +198,7 @@ class MailAttachment(object):
     def payload(self):
         if self._payload is None:
             self._payload = self._get_payload()
-        return self.payload
+        return self._payload
 
     def download(self, directory=None, filename=None):
         if not filename:
@@ -550,7 +554,7 @@ class MailBox(object):
     """邮件收发器"""
 
     def __init__(self, imap_host=None, smtp_host=None, username=None,
-                 password=None, use_tls=False, use_ssl=False, timeout=10,
+                 password=None, use_tls=False, use_ssl=False, timeout=60,
                  logger=None):
         self._imap_host = imap_host  # 接收服务器
         self._smtp_host = smtp_host  # 发送服务器
@@ -619,6 +623,7 @@ class MailBox(object):
         res = imap_server.login(self.username, self.password)
         self._check_command_response(res, command="login")
         self._imap = imap_server
+        self.declare_identity()
 
     def logout(self):
         self.username = None
@@ -632,15 +637,15 @@ class MailBox(object):
 
     def send(self, message=None, debug=False):
         if self.use_ssl:
-            server = smtplib.SMTP_SSL(timeout=self.timeout)
+            server = smtplib.SMTP_SSL(*self.smtp_host, timeout=self.timeout)
         else:
-            server = smtplib.SMTP(timeout=self.timeout)
+            server = smtplib.SMTP(*self.smtp_host, timeout=self.timeout)
         if debug:
             server.set_debuglevel(1)
 
         server.connect(*self.smtp_host)
 
-        if self.use_tls:
+        if not self.use_ssl and self.use_tls:
             server.ehlo()
             server.starttls()
 
@@ -649,19 +654,28 @@ class MailBox(object):
 
         if not message.sender:
             message.sender = self.username
-        self._log.info("Sending email to %s", ", ".join(message.to_addrs))
+        self._log.info("Sending email to %s", message.to_addrs)
         server.sendmail(message.sender, message.to_addrs, message.as_string())
         self._log.info("Send mail is successful")
         server.quit()
 
-    def _imap_raw_commad(self):
-        """执行原生 IMAP 协议命令"""
-
     def _imap_command(self, command, *args, **kwargs):
         """封装 IMAP4 对象的命令方法"""
-        res = getattr(self._imap, command)(*args, **kwargs)
+        cmd_func = getattr(self._imap, command, None)
+        if not cmd_func:
+            cmd_func = functools.partial(
+                self._imap._simple_command, command.upper()
+            )
+        res = cmd_func(*args, **kwargs)
         data = self._check_command_response(res, command=command)
         return data
+
+    def declare_identity(self, name="kmailbox", version=__version__,
+                         vendor="kmailbox"):
+        client_id = '("name" "{}" "version" "{}" "vendor" "{}")'.format(
+            name, version, vendor
+        )
+        return self._imap_command("ID", client_id)
 
     @property
     def folders(self):
@@ -734,7 +748,7 @@ class MailBox(object):
             mail_list = data[0].split()
         return mail_list
 
-    def fetch_messages(self, msg_set, mark_seen=True):
+    def fetch_messages(self, msg_set, mark_seen=True, gen=False):
         """使用 RFC822 电子邮件的标准格式下载邮件
 
         当 message_part 使用 RFC822 时功能上等同于 BODY[]
@@ -743,26 +757,90 @@ class MailBox(object):
         """
         msg_parts = ("(BODY[] UID FLAGS)" if mark_seen
                      else "(BODY.PEEK[] UID FLAGS)")
-        return [
-            Message(is_received=True).from_raw_message_data(
-                self._imap_command('fetch', num, msg_parts)
-            ) for num in msg_set
-        ]
+        msg_gen = (Message(is_received=True).from_raw_message_data(
+            self._imap_command('fetch', num, msg_parts)
+        ) for num in msg_set)
+        return msg_gen if gen else list(msg_gen)
 
-    def all(self, mark_seen=True):
-        return self.fetch_messages(self._search("ALL"), mark_seen)
+    def all(self, mark_seen=True, gen=False):
+        return self.fetch_messages(self._search("ALL"), mark_seen, gen)
 
-    def unread(self, mark_seen=True):
-        return self.fetch_messages(self._search("UNSEEN"), mark_seen)
+    def unread(self, mark_seen=True, gen=False):
+        return self.fetch_messages(self._search("UNSEEN"), mark_seen, gen)
 
-    def recent(self, mark_seen=True):
-        return self.fetch_messages(self._search("RECENT"), mark_seen)
+    def recent(self, mark_seen=True, gen=False):
+        return self.fetch_messages(self._search("RECENT"), mark_seen, gen)
 
-    def new(self, mark_seen=True):
-        return self.fetch_messages(self._search("NEW"), mark_seen)
+    def new(self, mark_seen=True, gen=False):
+        return self.fetch_messages(self._search("NEW"), mark_seen, gen)
 
-    def old(self, mark_seen=True):
-        return self.fetch_messages(self._search("OLD"), mark_seen)
+    def old(self, mark_seen=True, gen=False):
+        return self.fetch_messages(self._search("OLD"), mark_seen, gen)
+
+    @staticmethod
+    def _cleaned_uid_set(uid_set):
+        """转换 uid 结合
+
+        Uid 集合可以是: 字符串(可以逗号分隔)，可迭代的对象
+        """
+        if type(uid_set) is str:
+            uid_set = uid_set.split(',')
+        try:
+            uid_set_iter = iter(uid_set)
+        except TypeError:
+            raise ValueError('Wrong uid type: "{}"'.format(type(uid_set)))
+
+        uid_list = []
+        for uid in uid_set_iter:
+            if not isinstance(uid, string_types):
+                try:
+                    uid = uid.uid
+                except AttributeError:
+                    raise ValueError('Wrong uid: "{}"'.format(uid))
+            uid = uid.strip()
+            if not uid.isdigit():
+                raise ValueError('Wrong uid: "{}"'.format(uid))
+            uid_list.append(uid)
+        return ','.join((item for item in uid_list))
+
+    def flag(self, uid_set, flag_set, value):
+        """设置或者取消设置邮件标志
+
+        参数 value 值为 True 时表示设置标志，否则为取消
+        """
+        uid_str = self._cleaned_uid_set(uid_set)
+        if not uid_str:
+            return None
+        if isinstance(uid_set, string_types):
+            flag_set = [flag_set]
+        store_result = self._imap.uid(
+            'STORE', uid_str, ('+' if value else '-') + 'FLAGS',
+            '({})'.format(' '.join(('\\' + item for item in flag_set)))
+        )
+        data = self._check_command_response(store_result)
+        return data
+
+    def expunge(self):
+        """将邮箱中所有打了删除标记的邮件彻底删除"""
+        return self._imap_commandself("expunge")
+
+    def mark_as_delete(self, uid_set):
+        """标记邮件为删除"""
+        return self.flag(uid_set, MailFlag.DELETED, True)
+
+    def mark_as_seen(self, uid_set):
+        """标记邮件为已读"""
+        return self.flag(uid_set, MailFlag.SEEN, True)
+
+    def mark_as_unseen(self, uid_set):
+        """标记邮件为未读"""
+        return self.flag(uid_set, MailFlag.SEEN, False)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, exc_traceback):
+        self.logout()
 
 
 if __name__ == '__main__':

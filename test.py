@@ -8,8 +8,9 @@
 import os
 import sys
 import logging
+from inspect import isgenerator
 from pprint import pprint
-from kmailbox import Message, MailBox
+from kmailbox import Message, MailBox, string_types
 
 try:
     from unittest import mock
@@ -70,6 +71,7 @@ class TestMailBox(object):
         cls.mailbox = MailBox(
             imap_host=os.getenv("KMAILBOX_IMAP_HOST"),
             smtp_host=os.getenv("KMAILBOX_SMTP_HOST"),
+            use_ssl=True,
             logger=logger,
         )
         cls.mailuser = os.environ["KMAILBOX_USER"]
@@ -78,40 +80,53 @@ class TestMailBox(object):
             os.environ["KMAILBOX_PASSWD"]
         )
 
-        cls.msg = Message()
-        cls.msg.sender = "KMailBox<{}>".format(cls.mailuser)
-        cls.msg.recipient = "huayongkuang@qq.com"
+        cls.sender = "KMailBox<{}>".format(cls.mailuser)
+        cls.recipient = "huayongkuang@qq.com"
+        # cls.cc_recipient = ["sudohuoty@163.com"]
+
+    def teardown_class(cls):
+        cls.mailbox.logout()
+
+    def create_message(self):
+        msg = Message()
+        msg.sender = self.sender
+        msg.recipient = self.recipient
+        # msg.cc_recipient = self.cc_recipient
+        return msg
 
     def test_sendmail(self):
-        self.msg.subject = "kmailbox test"
-        self.msg.content = "This is test"
-        self.mailbox.send(self.msg)
+        msg = self.create_message()
+        msg.subject = "kmailbox test"
+        msg.content = "This is test"
+        self.mailbox.send(msg)
 
     def test_send_html_mail(self):
-        self.msg.subject = "kmailbox test send html mail"
-        self.msg.content = html_content
-        self.msg.is_html = True
-        self.msg.attachments = ["cid0:imgs/mailbox-icon.png",
-                                "cid1:imgs/20171005170550.jpg"]
+        msg = self.create_message()
+        msg.subject = "kmailbox test send html mail"
+        msg.content = html_content
+        msg.is_html = True
+        msg.attachments = ["cid0:imgs/mailbox-icon.png",
+                           "cid1:imgs/20171005170550.jpg"]
         with mock.patch.object(self.mailbox, "use_tls", True):
-            self.mailbox.send(self.msg)
+            self.mailbox.send(msg)
 
     def test_send_attachments(self):
-        self.msg.subject = "kmailbox test send attachments"
-        self.msg.content = html_content
-        self.msg.is_html = True
-        self.msg.attachments = ["cid0:imgs/mailbox-icon.png",
-                                "cid1:imgs/20171005170550.jpg",
-                                "kmailbox.py", "README.md"]
-        self.mailbox.send(self.msg)
+        msg = self.create_message()
+        msg.subject = "kmailbox test send attachments"
+        msg.content = html_content
+        msg.is_html = True
+        msg.attachments = ["cid0:imgs/mailbox-icon.png",
+                           "cid1:imgs/20171005170550.jpg",
+                           "kmailbox.py", "README.md"]
+        self.mailbox.send(msg)
 
-    def test_imap(self):
+    def test_receive_mails(self):
         print(self.mailbox.folders)
         self.mailbox.select()
-        # print(self.mailbox.select("垃圾邮"))
-        # mails = self.mailbox.all(mark_seen=False)
+        # print(self.mailbox.select("垃圾邮件"))
+        mails = self.mailbox.all(mark_seen=False)
         # mails = self.mailbox.unread(mark_seen=False)
-        mails = self.mailbox.new(mark_seen=False)
+        # mails = self.mailbox.new(mark_seen=False)
         print(mails)
         pprint([{
             "uid": mail.uid,
@@ -122,7 +137,20 @@ class TestMailBox(object):
             "flags": mail.flags,
             "attachments": [att.filename for att in mail.attachments],
         } for mail in mails])
-        # print(mails[0].content)
-        # for part in mails[0]._msg.walk():
-        #     print(part)
-        self.mailbox.logout()
+        assert isinstance(mails[0].content, string_types)
+
+        assert isgenerator(self.mailbox.all(mark_seen=False, gen=True))
+
+    def test_flag(self):
+        self.mailbox.select()
+        print(self.mailbox.mark_as_unseen("1384335828"))
+        print(self.mailbox.mark_as_seen("1384335828"))
+
+    def test_download_attachment(self):
+        self.mailbox.select()
+        for mail in self.mailbox.all(mark_seen=False, gen=True):
+            if not mail.attachments:
+                continue
+            for att in mail.attachments:
+                att.download(os.path.expanduser("~/Temp"))
+                print("download attachment '%s'" % att.filename)
