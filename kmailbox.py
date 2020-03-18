@@ -32,17 +32,17 @@ __version__ = "0.1.0"
 
 if sys.version_info.major > 2:
     string_types = str
-    binary_type = bytes
+    binary_types = bytes
 else:
     string_types = basestring
-    binary_type = str
+    binary_types = str
 
 if 'ID' not in imaplib.Commands:
     imaplib.Commands['ID'] = ('AUTH', 'NONAUTH')
 
 
 def _decode_string(data, encoding="uft-8"):
-    if isinstance(data, binary_type):
+    if isinstance(data, binary_types):
         try:
             return data.decode(encoding or 'utf-8', 'ignore')
         except LookupError:
@@ -501,26 +501,33 @@ class Message(object):
         return self
 
     def uid_from_string(self, data):
-        uid_match = re.search(R'UID\s+(?P<uid>\d+)', data)
+        if isinstance(data, binary_types):
+            data = data.decode("utf-8")
+        uid_match = re.search(r'UID\s+(?P<uid>\d+)', data)
         if uid_match:
             # zimbra, yandex, gmail, gmx
             uid = uid_match.group('uid')
         else:
             # mail.ru, ms exchange server
-            re_pattern = R'(^|\s+)UID\s+(?P<uid>\d+)($|\s+)'
+            re_pattern = r'(^|\s+)UID\s+(?P<uid>\d+)($|\s+)'
             for raw_flag_item in data:
                 uid_flag_match = re.search(re_pattern, raw_flag_item.decode())
                 if uid_flag_match:
                     uid = uid_flag_match.group('uid')
         self.uid = uid
+        return uid
 
     def flag_from_string(self, data):
+        if isinstance(data, binary_types):
+            data = data.decode("utf-8")
         result = []
         for raw_flag_item in data:
             result.extend(imaplib.ParseFlags(raw_flag_item))
-        self.flags = tuple(
+        flags = tuple(
             item.decode().strip().replace('\\', '').upper() for item in result
         )
+        self.flags = flags
+        return flags
 
     def from_raw_message_data(self, data):
         # 提取邮件的标识、标记、消息体部分
@@ -541,9 +548,9 @@ class Message(object):
             self.from_string(raw_message_data)
         else:
             self.from_bytes(raw_message_data)
-        if isinstance(raw_uid_data, binary_type):
+        if isinstance(raw_uid_data, binary_types):
             raw_uid_data = raw_uid_data.decode("utf-8")
-        if isinstance(raw_flag_data, binary_type):
+        if isinstance(raw_flag_data, binary_types):
             raw_flag_data = raw_flag_data.decode("utf-8")
         self.uid_from_string(raw_uid_data)
         self.flag_from_string(raw_flag_data)
@@ -697,7 +704,7 @@ class MailBox(object):
     @staticmethod
     def _encode_folder(name):
         """对目录名做 UTF7 编码"""
-        if not isinstance(name, binary_type):
+        if not isinstance(name, binary_types):
             name = imap_utf7.encode(name)
         name = name.replace(b'\\', b'\\\\').replace(b'"', b'\\"')
         return b'"' + name + b'"'
@@ -742,7 +749,7 @@ class MailBox(object):
             criterions = ["ALL"]
         self._log.info("Using criterion %s search mails", criterions)
         data = self._imap_command('search', charset, *criterions)
-        if isinstance(data[0], binary_type):
+        if isinstance(data[0], binary_types):
             mail_list = data[0].decode("utf-8").split()
         else:
             mail_list = data[0].split()
@@ -762,6 +769,13 @@ class MailBox(object):
         ) for num in msg_set)
         return msg_gen if gen else list(msg_gen)
 
+    def fetch_uids(self, msg_set, gen=False):
+        """获取邮件的唯一标识"""
+        uid_gen = (Message(is_received=True).uid_from_string(
+            self._imap_command('fetch', num, "UID")[0]
+        ) for num in msg_set)
+        return uid_gen if gen else list(uid_gen)
+
     def all(self, mark_seen=True, gen=False):
         return self.fetch_messages(self._search("ALL"), mark_seen, gen)
 
@@ -776,6 +790,11 @@ class MailBox(object):
 
     def old(self, mark_seen=True, gen=False):
         return self.fetch_messages(self._search("OLD"), mark_seen, gen)
+
+    def from_criteria(self, criteria, mark_seen=True, gen=False):
+        return self.fetch_messages(
+            self._search('FROM "{}"'.format(criteria)), mark_seen, gen
+        )
 
     @staticmethod
     def _cleaned_uid_set(uid_set):
@@ -822,7 +841,7 @@ class MailBox(object):
 
     def expunge(self):
         """将邮箱中所有打了删除标记的邮件彻底删除"""
-        return self._imap_commandself("expunge")
+        return self._imap_command("expunge")
 
     def mark_as_delete(self, uid_set):
         """标记邮件为删除"""
@@ -843,5 +862,9 @@ class MailBox(object):
         self.logout()
 
 
+def _main():
+    print("hi...")
+
+
 if __name__ == '__main__':
-    pass
+    _main()
