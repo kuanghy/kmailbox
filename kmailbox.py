@@ -50,6 +50,10 @@ def _decode_string(data, encoding="uft-8"):
     return data
 
 
+def _shorten_text(text, width=60, placeholder="..."):
+    return (text[:width] + placeholder) if len(text) > width else text
+
+
 def _decode_email_header(header):
     data, encoding = decode_header(header)[0]
     return _decode_string(data, encoding)
@@ -511,17 +515,19 @@ class Message(object):
             # mail.ru, ms exchange server
             re_pattern = r'(^|\s+)UID\s+(?P<uid>\d+)($|\s+)'
             for raw_flag_item in data:
-                uid_flag_match = re.search(re_pattern, raw_flag_item.decode())
+                uid_flag_match = re.search(
+                    re_pattern, _decode_string(raw_flag_item)
+                )
                 if uid_flag_match:
                     uid = uid_flag_match.group('uid')
         self.uid = uid
         return uid
 
-    def flag_from_string(self, data):
-        if isinstance(data, binary_types):
-            data = data.decode("utf-8")
+    def flag_from_string(self, data_set):
         result = []
-        for raw_flag_item in data:
+        for raw_flag_item in data_set:
+            if isinstance(raw_flag_item, string_types):
+                raw_flag_item = raw_flag_item.encode("utf-8")
             result.extend(imaplib.ParseFlags(raw_flag_item))
         flags = tuple(
             item.decode().strip().replace('\\', '').upper() for item in result
@@ -530,30 +536,37 @@ class Message(object):
         return flags
 
     def from_raw_message_data(self, data):
-        # 提取邮件的标识、标记、消息体部分
+        # 提取邮件的标识标记、消息体部分
         raw_message_data = b''
-        raw_uid_data = b''
-        raw_flag_data = []
-        for fetch_item in data:
-            # flags
-            if type(fetch_item) is bytes and imaplib.ParseFlags(fetch_item):
-                raw_flag_data.append(fetch_item)
-            # data, uid
-            if type(fetch_item) is tuple:
-                raw_uid_data = fetch_item[0]
-                raw_message_data = fetch_item[1]
+        raw_uid_or_flag_data = []
+        for item in data:
+            if isinstance(item, (tuple, list)):
+                item = list(item)
+                if not raw_message_data:
+                    try:
+                        raw_message_data = item.pop(1)
+                    except IndexError:
+                        pass
+                raw_uid_or_flag_data.extend(item)
+            else:
+                raw_uid_or_flag_data.append(item)
 
         # 分别解析邮件的标识、标记、消息体部分
         if isinstance(raw_message_data, str):
             self.from_string(raw_message_data)
         else:
             self.from_bytes(raw_message_data)
-        if isinstance(raw_uid_data, binary_types):
-            raw_uid_data = raw_uid_data.decode("utf-8")
-        if isinstance(raw_flag_data, binary_types):
-            raw_flag_data = raw_flag_data.decode("utf-8")
-        self.uid_from_string(raw_uid_data)
-        self.flag_from_string(raw_flag_data)
+        try:
+            raw_uid_or_flag_data = b' '.join(raw_uid_or_flag_data)
+        except TypeError:
+            raw_uid_or_flag_data = ' '.join(raw_uid_or_flag_data)
+        try:
+            self.uid_from_string(raw_uid_or_flag_data)
+            self.flag_from_string([raw_uid_or_flag_data])
+        except Exception:
+            print("-" * 120)
+            print(data)
+            print("-" * 120)
         return self
 
 
@@ -802,7 +815,7 @@ class MailBox(object):
 
         Uid 集合可以是: 字符串(可以逗号分隔)，可迭代的对象
         """
-        if type(uid_set) is str:
+        if isinstance(uid_set, string_types):
             uid_set = uid_set.split(',')
         try:
             uid_set_iter = iter(uid_set)
@@ -836,6 +849,8 @@ class MailBox(object):
             'STORE', uid_str, ('+' if value else '-') + 'FLAGS',
             '({})'.format(' '.join(('\\' + item for item in flag_set)))
         )
+        self._log.info("Falg %s (value=%r) for %s",
+                       flag_set, value, _shorten_text(uid_str))
         data = self._check_command_response(store_result)
         return data
 

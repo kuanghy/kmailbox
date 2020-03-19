@@ -75,10 +75,7 @@ class TestMailBox(object):
             logger=logger,
         )
         cls.mailuser = os.environ["KMAILBOX_USER"]
-        cls.mailbox.login(
-            cls.mailuser,
-            os.environ["KMAILBOX_PASSWD"]
-        )
+        cls.mailbox.login(cls.mailuser, os.environ["KMAILBOX_PASSWD"])
 
         cls.sender = "KMailBox<{}>".format(cls.mailuser)
         cls.recipient = "huayongkuang@qq.com"
@@ -145,6 +142,11 @@ class TestMailBox(object):
         self.mailbox.select()
         print(self.mailbox.mark_as_unseen("1384335828"))
         print(self.mailbox.mark_as_seen("1384335828"))
+
+    def test_delete_mail(self):
+        self.mailbox.select()
+        self.mailbox.mark_as_delete("1384335845,1384335844")
+        self.mailbox.expunge()
 
     def test_download_attachment(self):
         self.mailbox.select()
