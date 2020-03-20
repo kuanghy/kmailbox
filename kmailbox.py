@@ -4,6 +4,8 @@
 # Author: Huoty <sudohuoty@163.com>
 # CreateTime: 2018-02-12 17:30:04
 
+from __future__ import print_function
+
 import os
 import sys
 import re
@@ -40,6 +42,40 @@ else:
 if 'ID' not in imaplib.Commands:
     imaplib.Commands['ID'] = ('AUTH', 'NONAUTH')
 
+DEFAULT_IMAP_HOST_MAPPING = {
+    "gmail.com": "imap.gmail.com",
+    "qq.com": "imap.qq.com",
+    "163.com": "imap.163.com",
+    "yeah.net": "imap.yeah.net",
+}
+
+DEFAULT_SMTP_HOST_MAPPING = {
+    "qq.com": "smtp.qq.com",
+    "163.com": "smtp.163.com",
+    "yeah.net": "smtp.yeah.net",
+    "gmail.com": "smtp.gmail.com",
+}
+
+
+def _get_default_imap_host(email_address):
+    if not email_address:
+        return
+    match = re.match(r".+@(.+)", email_address)
+    if not match:
+        return
+    email_domain = match.group(1)
+    return DEFAULT_IMAP_HOST_MAPPING.get(email_domain)
+
+
+def _get_default_smtp_host(email_address):
+    if not email_address:
+        return
+    match = re.match(r".+@(.+)", email_address)
+    if not match:
+        return
+    email_domain = match.group(1)
+    return DEFAULT_SMTP_HOST_MAPPING.get(email_domain)
+
 
 def _decode_string(data, encoding="uft-8"):
     if isinstance(data, binary_types):
@@ -52,6 +88,14 @@ def _decode_string(data, encoding="uft-8"):
 
 def _shorten_text(text, width=60, placeholder="..."):
     return (text[:width] + placeholder) if len(text) > width else text
+
+
+def _shorten_sequence_string(sequence, max_len=3, placeholder="..."):
+    return ", ".join(
+        [
+            "{!r}".format(item) for item in list(sequence)[:max_len]
+        ] + ([placeholder] if len(sequence) > max_len else [])
+    )
 
 
 def _decode_email_header(header):
@@ -598,6 +642,9 @@ class MailBox(object):
     @property
     def imap_host(self):
         host = self._imap_host
+        if not host:
+            return None
+
         if ':' in host:
             host, port = host.rsplit(':', 1)
             port = int(port)
@@ -607,7 +654,10 @@ class MailBox(object):
 
     @property
     def smtp_host(self):
-        host = self._smtp_host
+        host = self._smtp_host or _get_default_smtp_host(self.username)
+        if not host:
+            return None
+
         if ':' in host:
             host, port = host.rsplit(':', 1)
             port = int(port)
@@ -628,9 +678,11 @@ class MailBox(object):
             err_str += ", command: {}".format(command)
         raise UnexpectedCommandStatusError(err_str)
 
-    def login(self, username, password):
-        self.username = username
-        self.password = password
+    def login(self, username=None, password=None):
+        if username:
+            self.username = username
+        if password:
+            self.password = password
 
         if not self.imap_host:
             return
@@ -878,7 +930,170 @@ class MailBox(object):
 
 
 def _main():
-    print("hi...")
+    from argparse import ArgumentParser
+
+    def create_argument(parser, *args, **kwargs):
+        parser.add_argument(*args, **kwargs)
+
+    parser = ArgumentParser(
+        description="Email tool by python (use smtp and imap protocol)"
+    )
+    create_argument(parser, "-v", "--version", action='version',
+                    version=__version__,
+                    help="Log level (default: info)")
+
+    basic_group = parser.add_argument_group(title="basic arguments")
+    create_argument(basic_group, "--imap", help="Email IMAP server")
+    create_argument(basic_group, "--smtp", help="Email SMTP server")
+    create_argument(basic_group, "-u", "--user",
+                    help="Email user")
+    create_argument(basic_group, "-p", "--password",
+                    help="Email user's password")
+    create_argument(basic_group, "--use-tls", action="store_true",
+                    help="Using TLS connect to server")
+    create_argument(basic_group, "--use-ssl", action="store_true",
+                    help="Using SSL connect to server")
+    create_argument(basic_group, "--timeout", type=int, default=30,
+                    help="Timeout, default: 30")
+    create_argument(basic_group, "--select", default="INBOX",
+                    help="Select a mailbox folder, default: INBOX")
+    create_argument(basic_group, "--list", action="store_true",
+                    help="List mailbox folder names")
+
+    send_group = parser.add_argument_group(title="send arguments")
+    create_argument(send_group, "--send", action="store_true", help="Send Mail")
+    create_argument(send_group, "-f", "--sender", help="Mail From")
+    create_argument(send_group, "-t", "--to", nargs="+", help="Recipients")
+    create_argument(send_group, "--cc", nargs="*", help="Carbon Copy recipients")
+    create_argument(send_group, "-s", "--subject", help="Mail subject")
+    create_argument(send_group, "-c", "--content", help="Mail Content")
+    create_argument(send_group, "-a", "--attachment", nargs="*",
+                    help="Mail attachments")
+
+    read_group = parser.add_argument_group(title="read arguments")
+    create_argument(read_group, "--all", action="store_true",
+                    help="Read all mails")
+    create_argument(read_group, "--unread", action="store_true",
+                    help="Read unread mails")
+    create_argument(read_group, "--recent", action="store_true",
+                    help="Read recent mails")
+    create_argument(read_group, "--new", action="store_true",
+                    help="Read new mails")
+    create_argument(read_group, "--old", action="store_true",
+                    help="Read old mails")
+    create_argument(read_group, "--verbose", action="store_true",
+                    help="verbosely display mail message")
+    create_argument(read_group, "--mark-as-seen", action="store_true",
+                    help="Mark as seen after read the mail")
+
+    mark_group = parser.add_argument_group(title="mark arguments")
+    create_argument(mark_group, "--delete", action="store_true",
+                    help="Delete mails")
+    create_argument(mark_group, "--seen", action="store_true",
+                    help="Mark mails as seen")
+    create_argument(mark_group, "--unseen", action="store_true",
+                    help="Mark mails as unseen")
+    create_argument(mark_group, "--uid", nargs="+",
+                    help="Mail id set, e.g. 1,2,3")
+
+    args = parser.parse_args()
+
+    username = args.user or os.getenv("KMAILBOX_USER")
+    password = args.password or os.getenv("KMAILBOX_PASSWD")
+    if not (username and password):
+        parser.error(
+            "the following arguments are required: -u/--user, -p/--password"
+        )
+    imap_host = args.imap
+    if not imap_host and not args.send:
+        imap_host = _get_default_imap_host(username)
+        if not imap_host:
+            parser.error("argument --imap are required")
+    box = MailBox(
+        imap_host=imap_host,
+        smtp_host=args.smtp,
+        username=username,
+        password=password,
+        use_tls=args.use_tls,
+        use_ssl=args.use_ssl,
+        timeout=args.timeout,
+    )
+    if args.send and not box.smtp_host:
+        parser.error("argument --smtp are required")
+    box.login()
+    if not args.list and not args.send:
+        box.select(args.select)
+
+    def send_mail():
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format='%(asctime)s - %(levelname)s - %(message)s'
+        )
+        box.logger = logging.getLogger("test")
+        msg = Message()
+        msg.sender = args.sender
+        msg.recipient = args.to
+        msg.cc_recipient = args.cc
+        msg.attachments = args.attachment
+        msg.content = args.content or sys.stdin.read()
+        msg.subject = args.subject or _shorten_text(msg.content, 50)
+        box.send(msg)
+        print("Send mail '{}' to {} done".format(
+            _shorten_text(msg.subject, 60),
+            _shorten_sequence_string(msg.to_addrs)
+        ))
+
+    def display_mails(fetch_func):
+        for mail in fetch_func(mark_seen=args.mark_as_seen, gen=True):
+            print("========", _shorten_text(mail.subject, 60), "========")
+            print("Sender:", mail.sender)
+            print("Date:", mail.date)
+            print("Recipient:", ", ".join([str(rec) for rec in mail.recipient]))
+            if mail.cc_recipient:
+                print("CC-Recipient:", ", ".join([
+                    str(rec) for rec in mail.cc_recipient
+                ]))
+            if mail.bcc_recipient:
+                print("BCC-Recipient:", ", ".join([
+                    str(rec) for rec in mail.bcc_recipient
+                ]))
+            if mail.reply_recipient:
+                print("Reply-Recipient:", ", ".join([
+                    str(rec) for rec in mail.reply_recipient
+                ]))
+            print("UID:", mail.uid, "  ", "Flags:", ", ".join(mail.flags))
+            print("Attachments:", mail.attachments)
+            if args.verbose:
+                print("Content:")
+                print(mail.content)
+            print()
+
+    if args.list:
+        for folder in box.folders:
+            print(folder.name, folder.flags, folder.delim)
+    elif args.send:
+        send_mail()
+    elif args.all:
+        display_mails(box.all)
+    elif args.unread:
+        display_mails(box.unread)
+    elif args.recent:
+        display_mails(box.recent)
+    elif args.new:
+        display_mails(box.new)
+    elif args.old:
+        display_mails(box.old)
+    elif args.delete:
+        box.mark_as_delete(args.uid)
+        print("Mark {} as delete done.".format(_shorten_sequence_string(args.uid)))
+    elif args.seen:
+        box.mark_as_seen(args.uid)
+        print("Mark {} as seen done.".format(_shorten_sequence_string(args.uid)))
+    elif args.unseen:
+        box.mark_as_unseen(args.uid)
+        print("Mark {} as unseen done.".format(_shorten_sequence_string(args.uid)))
+    else:
+        parser.print_usage(sys.stderr)
 
 
 if __name__ == '__main__':
