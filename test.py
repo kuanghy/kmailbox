@@ -121,10 +121,10 @@ class TestMailBox(object):
         print(self.mailbox.folders)
         self.mailbox.select()
         # print(self.mailbox.select("垃圾邮件"))
-        # mails = self.mailbox.all(mark_seen=False)
+        mails = self.mailbox.all(mark_seen=False)
         # mails = self.mailbox.unread(mark_seen=False)
         # mails = self.mailbox.new(mark_seen=False)
-        mails = self.mailbox.from_criteria("kuanghuayong@joinquant.com", mark_seen=False)
+        # mails = self.mailbox.from_criteria("konitor@yeah.net", mark_seen=False)
         print(mails)
         pprint([{
             "uid": mail.uid,
