@@ -2,7 +2,6 @@
 
 # Copyright (c) Huoty, All rights reserved
 # Author: Huoty <sudohuoty@163.com>
-# CreateTime: 2018-02-12 17:30:04
 
 from __future__ import print_function
 
@@ -15,7 +14,7 @@ import logging
 import binascii
 import datetime
 import functools
-from collections import namedtuple, UserString
+from collections import namedtuple
 
 import imaplib
 import smtplib
@@ -28,6 +27,11 @@ from email.mime.image import MIMEImage
 from email.mime.audio import MIMEAudio
 from email.mime.multipart import MIMEMultipart
 from email.utils import getaddresses as get_email_addr
+
+try:
+    from collections import UserString
+except ImportError:
+    from UserString import UserString
 
 
 __version__ = "0.1.0"
@@ -778,7 +782,7 @@ class MailBox(object):
         self._log.info("Selecting mail folder '%s'", box)
         self._imap_command("select", self._encode_folder(box), readonly)
 
-    def _search(self, *criterions, charset=None):
+    def _search(self, *criterions, **kwargs):
         """搜索邮件
 
         常用 criterion 字段：
@@ -809,9 +813,13 @@ class MailBox(object):
             UNSEEN：未读邮件
 
         Criterion 示例，获取未读且标题中带 hello 的邮件："(UNSEEN SUBJECT 'hello')"
+
+        另外可传递关键参数 charset 来指定编码格式
         """
+
         if not criterions:
             criterions = ["ALL"]
+        charset = kwargs.get("charset", None)
         self._log.info("Using criterion %s search mails", criterions)
         data = self._imap_command('search', charset, *criterions)
         if isinstance(data[0], binary_types):
@@ -938,9 +946,9 @@ def _main():
     parser = ArgumentParser(
         description="Email tool by python (use smtp and imap protocol)"
     )
+    parser._optionals.title = "help arguments"
     create_argument(parser, "-v", "--version", action='version',
-                    version=__version__,
-                    help="Log level (default: info)")
+                    version=__version__)
 
     basic_group = parser.add_argument_group(title="basic arguments")
     create_argument(basic_group, "--imap", help="Email IMAP server")
