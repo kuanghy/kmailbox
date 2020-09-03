@@ -623,7 +623,7 @@ class MailBox(object):
 
     def __init__(self, imap_host=None, smtp_host=None, username=None,
                  password=None, use_tls=False, use_ssl=False, timeout=60,
-                 logger=None):
+                 logger=None, debug=False):
         self._imap_host = imap_host  # 接收服务器
         self._smtp_host = smtp_host  # 发送服务器
 
@@ -635,7 +635,8 @@ class MailBox(object):
 
         self.timeout = timeout
 
-        self._imap = None
+        self._smtp_server = None
+        self._imap_server = None
 
         if not logger:
             logger = logging.getLogger("kmailbox")
@@ -643,9 +644,11 @@ class MailBox(object):
             logger.propagate = False
         self._log = self.logger = logger
 
+        self.debug = debug
+
     @property
     def imap_host(self):
-        host = self._imap_host
+        host = self._imap_host or _get_default_imap_host(self.username)
         if not host:
             return None
 
@@ -669,6 +672,42 @@ class MailBox(object):
             port = smtplib.SMTP_SSL_PORT if self.use_ssl else smtplib.SMTP_PORT
         return host, port
 
+    @property
+    def imap_server(self):
+        if not self._imap_server and self.imap_host:
+            if self.use_ssl:
+                server = imaplib.IMAP4_SSL(*self.imap_host)
+            else:
+                server = imaplib.IMAP4(*self.imap_host)
+            if self.debug:
+                server.debug = 1
+            self._log.debug("Using '%s' login to %s",
+                            self.username, self.imap_host)
+            res = server.login(self.username, self.password)
+            self._check_command_response(res, command="login")
+            self._imap_server = server
+            self.declare_identity()
+        return self._imap_server
+
+    @property
+    def smtp_server(self):
+        if not self._smtp_server and self.smtp_host:
+            if self.use_ssl:
+                server = smtplib.SMTP_SSL(*self.smtp_host, timeout=self.timeout)
+            else:
+                server = smtplib.SMTP(*self.smtp_host, timeout=self.timeout)
+            if self.debug:
+                server.set_debuglevel(1)
+            self._log.debug("Using '%s' login to %s",
+                            self.username, self.smtp_host)
+            server.connect(*self.smtp_host)
+            server.ehlo()
+            if not self.use_ssl and self.use_tls:
+                server.starttls()
+            server.login(self.username, self.password)
+            self._smtp_server = server
+        return self._smtp_server
+
     def _check_command_response(self, response, expected='OK', command=None):
         """校验命令的返回结果状态"""
         typ, data = response[0], response[1]
@@ -682,65 +721,41 @@ class MailBox(object):
             err_str += ", command: {}".format(command)
         raise UnexpectedCommandStatusError(err_str)
 
-    def login(self, username=None, password=None):
-        if username:
-            self.username = username
-        if password:
-            self.password = password
-
-        if not self.imap_host:
+    def _close_smtp_server(self):
+        if not self._smtp_server:
             return
+        self._smtp_server.quit()
+        self._smtp_server = None
 
-        if self.use_ssl:
-            imap_server = imaplib.IMAP4_SSL(*self.imap_host)
-        else:
-            imap_server = imaplib.IMAP4(*self.imap_host)
-        self._log.info("Using '%s' login mailbox", self.username)
-        res = imap_server.login(self.username, self.password)
-        self._check_command_response(res, command="login")
-        self._imap = imap_server
-        self.declare_identity()
+    def _close_imap_server(self):
+        if not self._imap_server:
+            return
+        self._imap_server.close()
+        res = self._imap_server.logout()
+        self._check_command_response(res, expected="BYE", command="logout")
+        self._imap_server = None
 
-    def logout(self):
+    def close(self):
+        self._close_smtp_server()
+        self._close_imap_server()
         self.username = None
         self.password = None
 
-        if not self._imap:
-            return
-
-        res = self._imap.logout()
-        self._check_command_response(res, expected="BYE", command="logout")
-
-    def send(self, message=None, debug=False):
-        if self.use_ssl:
-            server = smtplib.SMTP_SSL(*self.smtp_host, timeout=self.timeout)
-        else:
-            server = smtplib.SMTP(*self.smtp_host, timeout=self.timeout)
-        if debug:
-            server.set_debuglevel(1)
-
-        server.connect(*self.smtp_host)
-
-        if not self.use_ssl and self.use_tls:
-            server.ehlo()
-            server.starttls()
-
-        server.ehlo()
-        server.login(self.username, self.password)
-
+    def send(self, message, after_reset_connect=False):
         if not message.sender:
             message.sender = self.username
         self._log.info("Sending email to %s", message.to_addrs)
-        server.sendmail(message.sender, message.to_addrs, message.as_string())
+        self.smtp_server.sendmail(message.sender, message.to_addrs, message.as_string())
         self._log.info("Send mail is successful")
-        server.quit()
+        if after_reset_connect:
+            self._close_smtp_server()
 
     def _imap_command(self, command, *args, **kwargs):
         """封装 IMAP4 对象的命令方法"""
-        cmd_func = getattr(self._imap, command, None)
+        cmd_func = getattr(self.imap_server, command, None)
         if not cmd_func:
             cmd_func = functools.partial(
-                self._imap._simple_command, command.upper()
+                self.imap_server._simple_command, command.upper()
             )
         res = cmd_func(*args, **kwargs)
         data = self._check_command_response(res, command=command)
@@ -905,7 +920,7 @@ class MailBox(object):
             return None
         if isinstance(uid_set, string_types):
             flag_set = [flag_set]
-        store_result = self._imap.uid(
+        store_result = self.imap_server.uid(
             'STORE', uid_str, ('+' if value else '-') + 'FLAGS',
             '({})'.format(' '.join(('\\' + item for item in flag_set)))
         )
@@ -934,7 +949,7 @@ class MailBox(object):
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
-        self.logout()
+        self.close()
 
 
 def _main():
@@ -1028,7 +1043,6 @@ def _main():
     )
     if args.send and not box.smtp_host:
         parser.error("argument --smtp are required")
-    box.login()
     if not args.list and not args.send:
         box.select(args.select)
 

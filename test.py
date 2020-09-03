@@ -75,14 +75,15 @@ class TestMailBox(object):
             logger=logger,
         )
         cls.mailuser = os.environ["KMAILBOX_USER"]
-        cls.mailbox.login(cls.mailuser, os.environ["KMAILBOX_PASSWD"])
+        cls.mailbox.username = cls.mailuser
+        cls.mailbox.password = os.environ["KMAILBOX_PASSWD"]
 
         cls.sender = "KMailBox<{}>".format(cls.mailuser)
         cls.recipient = "huayongkuang@qq.com"
         # cls.cc_recipient = ["sudohuoty@163.com"]
 
     def teardown_class(cls):
-        cls.mailbox.logout()
+        cls.mailbox.close()
 
     def create_message(self):
         msg = Message()

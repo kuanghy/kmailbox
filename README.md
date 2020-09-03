@@ -115,14 +115,6 @@ MailBox(imap_host=None, smtp_host=None, username=None, password=None,
 
 方法说明：
 
-- login(username, password)
-
-登录邮箱，如果只设置了 smtp_host，则登录只记录密码，在调用 send 方法发送邮件是才真正登录
-
-- logout()
-
-退出登录
-
 - send(message=None, debug=False)
 
 发送邮件，参数 message 为 `Message` 实例，debug 表示是否开启调试模式
@@ -171,6 +163,10 @@ MailBox(imap_host=None, smtp_host=None, username=None, password=None,
 
 标记邮件为未读
 
+- close()
+
+关闭邮箱，同时会关闭与 imap、smtp 服务器的连接
+
 ## 接口调用示例
 
 ### 发送普通文本邮件
@@ -186,7 +182,8 @@ msg.subject = "kmailbox test"
 msg.content = "This is test"
 
 mailbox = MailBox(smtp_host="smtp.yeah.net", use_tls=True)
-mailbox.login(os.environ["MAIL_USER"], os.environ["MAIL_PASSWD"])
+mailbox.username = os.environ["MAIL_USER"]
+mailbox.password = os.environ["MAIL_PASSWD"]
 mailbox.send(msg)
 ```
 
@@ -219,8 +216,12 @@ msg.attachments = [
     "README.md"
 ]
 
-mailbox = MailBox(smtp_host="smtp.yeah.net", use_ssl=True)
-mailbox.login(os.environ["MAIL_USER"], os.environ["MAIL_PASSWD"])
+mailbox = MailBox(
+    smtp_host="smtp.yeah.net",
+    use_ssl=True,
+    username=os.environ["MAIL_USER"]
+    password=os.environ["MAIL_PASSWD"]
+)
 mailbox.send(msg)
 ```
 
@@ -228,7 +229,8 @@ mailbox.send(msg)
 
 ```python
 mailbox = MailBox(imap_host="imap.yeah.net", use_ssl=True)
-mailbox.login(os.environ["MAIL_USER"], os.environ["MAIL_PASSWD"])
+mailbox.username = os.environ["MAIL_USER"]
+mailbox.password = os.environ["MAIL_PASSWD"]
 mailbox.select()
 for mail mailbox.all(mark_seen=False, gen=True)
     pprint({
