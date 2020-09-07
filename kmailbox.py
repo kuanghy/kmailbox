@@ -34,7 +34,7 @@ except ImportError:
     from UserString import UserString
 
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 if sys.version_info.major > 2:
     string_types = str
@@ -429,7 +429,13 @@ class Message(object):
         self.charset = "utf-8"          # 邮件编码
 
         # 底层消息对象，为 email.message.Message 或其子类的对象
+        # 用于在解析接收到的邮件消息时记录原始的二进制消息数据
         self._msg = None
+
+    def __repr__(self):
+        return "{}(sender={}, subject={})".format(
+            self.__class__, self.sender, self.subject
+        )
 
     @property
     def to_addrs(self):
@@ -529,15 +535,15 @@ class Message(object):
         return msg
 
     def as_string(self):
-        if self._msg:
+        if self._msg:                    # 为接收到的邮件消息
             return self._msg.as_string()
-        elif not self.is_received:
-            msg = self.__set_headers()
+        elif not self.is_received:       # 为要发送的邮件消息
+            msg = self.__set_headers()   # 设置邮件头信息
             msg.attach(MIMEText(
                 self.content,
                 _subtype=("html" if self.is_html else "plain"),
                 _charset=self.charset
-            ))  # 添加正文内容
+            ))                           # 添加正文内容
             self.__set_attachments(msg)  # 添加附件
             self._msg = msg
             return msg.as_string()
@@ -945,6 +951,22 @@ class MailBox(object):
         """标记邮件为未读"""
         return self.flag(uid_set, MailFlag.SEEN, False)
 
+    def relay(self, to_addrs, criterions=None, on_condition_what=None):
+        """邮件转发"""
+        if on_condition_what and not callable(on_condition_what):
+            raise Exception("on_condition_what must be a callable object")
+        if criterions:
+            msgs = self.fetch_messages(
+                self._search(criterions), mark_seen=False, gen=True
+            )
+        else:
+            msgs = self.new(mark_seen=False, gen=True)
+        for msg in msgs:
+            if on_condition_what and not on_condition_what(msg):
+                continue
+            self.smtp_server.sendmail(msg.sender, to_addrs, msg.as_string())
+            self._log.info("Relay %s to %s", msg, to_addrs)
+
     def __enter__(self):
         return self
 
@@ -964,6 +986,12 @@ def _main():
     parser._optionals.title = "help arguments"
     create_argument(parser, "-v", "--version", action='version',
                     version=__version__)
+    create_argument(parser, "-d", "--debug", action="store_true",
+                    help="Enable debug mode")
+    create_argument(parser, "--loglevel",
+                    choices=["debug", "info", "warning", "error", "fatal",
+                             "critical"],
+                    help="Set log level and enbale logger")
 
     basic_group = parser.add_argument_group(title="basic arguments")
     create_argument(basic_group, "--imap", help="Email IMAP server")
@@ -1019,6 +1047,10 @@ def _main():
     create_argument(mark_group, "--uid", nargs="+",
                     help="Mail id set, e.g. 1,2,3")
 
+    relay_group = parser.add_argument_group(title="relay arguments")
+    create_argument(relay_group, "--relay-to", nargs="*",
+                    help="Relay mails to other addresses")
+
     args = parser.parse_args()
 
     username = args.user or os.getenv("KMAILBOX_USER")
@@ -1032,6 +1064,17 @@ def _main():
         imap_host = _get_default_imap_host(username)
         if not imap_host:
             parser.error("argument --imap are required")
+    if args.loglevel:
+        logger = logging.getLogger("kmailbox")
+        handler = logging.StreamHandler()
+        handler.setLevel(getattr(logging, args.loglevel.upper()))
+        handler.setFormatter(logging.Formatter(
+            '%(asctime)s - %(levelname)s - %(message)s'
+        ))
+        logger.addHandler(handler)
+        logger.propagate = False
+    else:
+        logger = None
     box = MailBox(
         imap_host=imap_host,
         smtp_host=args.smtp,
@@ -1040,6 +1083,8 @@ def _main():
         use_tls=args.use_tls,
         use_ssl=args.use_ssl,
         timeout=args.timeout,
+        logger=logger,
+        debug=args.debug,
     )
     if args.send and not box.smtp_host:
         parser.error("argument --smtp are required")
@@ -1114,6 +1159,8 @@ def _main():
     elif args.unseen:
         box.mark_as_unseen(args.uid)
         print("Mark {} as unseen done.".format(_shorten_sequence_string(args.uid)))
+    elif args.relay_to:
+        box.relay(args.to)
     else:
         parser.print_usage(sys.stderr)
 
