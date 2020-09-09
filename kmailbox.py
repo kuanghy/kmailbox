@@ -444,7 +444,7 @@ class Message(object):
 
     def __repr__(self):
         return "{}(sender={}, subject={})".format(
-            self.__class__, self.sender, self.subject
+            self.__class__.__name__, self.sender, self.subject
         )
 
     @property
@@ -974,7 +974,7 @@ class MailBox(object):
         for msg in msgs:
             if on_condition_what and not on_condition_what(msg):
                 continue
-            self.smtp_server.sendmail(msg.sender, to_addrs, msg.as_string())
+            self.smtp_server.sendmail(self.username, to_addrs, msg.as_string())
             self._log.info("Relay %s to %s", msg, to_addrs)
 
     def __enter__(self):
@@ -1076,8 +1076,10 @@ def _main():
             parser.error("argument --imap are required")
     if args.loglevel:
         logger = logging.getLogger("kmailbox")
-        handler = logging.StreamHandler()
-        handler.setLevel(getattr(logging, args.loglevel.upper()))
+        loglevel = getattr(logging, args.loglevel.upper())
+        logger.setLevel(loglevel)
+        handler = logging.StreamHandler(sys.stdout)
+        handler.setLevel(loglevel)
         handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(levelname)s - %(message)s'
         ))
@@ -1170,7 +1172,7 @@ def _main():
         box.mark_as_unseen(args.uid)
         print("Mark {} as unseen done.".format(_shorten_sequence_string(args.uid)))
     elif args.relay_to:
-        box.relay(args.to)
+        box.relay(args.relay_to)
     else:
         parser.print_usage(sys.stderr)
 
