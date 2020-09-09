@@ -26,6 +26,7 @@ from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 from email.mime.audio import MIMEAudio
 from email.mime.multipart import MIMEMultipart
+from email.header import Header as EmailHeader
 from email.utils import getaddresses as get_email_addr
 
 try:
@@ -197,13 +198,20 @@ class MailFlag(object):
 class MailAddress(UserString):
     """邮件地址"""
 
+    _addr_pattern = r"(.*)<(.*@.*)>"
+
     def __init__(self, address, name=None):
-        self.address = address
-        self.name = name
-        if name:
-            self.data = '{}<{}>'.format(name, address)
-        else:
+        match = re.match(self._addr_pattern, address)
+        if match:
+            self.name, self.address = match.groups()
             self.data = address
+        else:
+            self.address = address
+            self.name = name
+            if name:
+                self.data = '{}<{}>'.format(name, address)
+            else:
+                self.data = address
 
 
 class MailAttachment(object):
@@ -284,7 +292,9 @@ class MessageProperty(object):
 
     def _parse_addr(self, data):
         result = []
-        if data:
+        if isinstance(data, EmailHeader):
+            result.append(MailAddress(_decode_email_header(data.encode())))
+        elif data:
             for raw_name, address in get_email_addr([data]):
                 name = _decode_email_header(raw_name).strip()
                 address = address.strip()
