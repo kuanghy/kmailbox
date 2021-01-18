@@ -109,7 +109,7 @@ MailBox(imap_host=None, smtp_host=None, username=None, password=None,
 
 `imap_host`、`smtp_host` 分别为 imap、smtp 的主机地址，如果需要支持端口号，则用冒号 `:` 分割，如：
 
-> smtp.yeah.net:25
+> smtp.gmail.com:25
 
 `use_tls` 表示是否加密邮件，`use_ssl` 表示是否使用 ssl 协议。
 
@@ -172,18 +172,17 @@ MailBox(imap_host=None, smtp_host=None, username=None, password=None,
 ### 发送普通文本邮件
 
 ```python
-import os
 from kmailbox import Message, MailBox
 
 msg = Message()
-sender = "KMailBox<konitor@yeah.net>"
-recipient = "huayongkuang@qq.com"
+sender = "Tester<test@google.com>"
+recipient = "hello@google.com"
 msg.subject = "kmailbox test"
 msg.content = "This is test"
 
-mailbox = MailBox(smtp_host="smtp.yeah.net", use_tls=True)
-mailbox.username = os.environ["MAIL_USER"]
-mailbox.password = os.environ["MAIL_PASSWD"]
+mailbox = MailBox(smtp_host="smtp.gmail.com", use_tls=True)
+mailbox.username = "username"
+mailbox.password = "password"
 mailbox.send(msg)
 ```
 
@@ -193,8 +192,8 @@ mailbox.send(msg)
 
 ```python
 msg = Message()
-sender = "KMailBox<konitor@yeah.net>"
-recipient = "huayongkuang@qq.com"
+sender = "Tester<test@google.com>"
+recipient = "hello@google.com"
 msg.subject = "kmailbox test send html and add attachments"
 msg.is_html = True
 msg.content = """\
@@ -217,10 +216,10 @@ msg.attachments = [
 ]
 
 mailbox = MailBox(
-    smtp_host="smtp.yeah.net",
+    smtp_host="smtp.gmail.com",
     use_ssl=True,
-    username=os.environ["MAIL_USER"]
-    password=os.environ["MAIL_PASSWD"]
+    username="username"
+    password="password"
 )
 mailbox.send(msg)
 ```
@@ -228,9 +227,9 @@ mailbox.send(msg)
 ### 接收邮件
 
 ```python
-mailbox = MailBox(imap_host="imap.yeah.net", use_ssl=True)
-mailbox.username = os.environ["MAIL_USER"]
-mailbox.password = os.environ["MAIL_PASSWD"]
+mailbox = MailBox(imap_host="imap.gmail.com", use_ssl=True)
+mailbox.username = "username"
+mailbox.password = "password"
 mailbox.select()
 for mail mailbox.all(mark_seen=False, gen=True)
     pprint({

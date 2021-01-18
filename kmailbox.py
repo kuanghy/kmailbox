@@ -55,10 +55,10 @@ DEFAULT_IMAP_HOST_MAPPING = {
 }
 
 DEFAULT_SMTP_HOST_MAPPING = {
+    "gmail.com": "smtp.gmail.com",
     "qq.com": "smtp.qq.com",
     "163.com": "smtp.163.com",
     "yeah.net": "smtp.yeah.net",
-    "gmail.com": "smtp.gmail.com",
 }
 
 
