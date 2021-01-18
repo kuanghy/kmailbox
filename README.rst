@@ -20,7 +20,7 @@ send plain text email:
     mailbox.password = "password"
     mailbox.send(msg)
 
-send plain text email:
+send html email:
 
 .. code-block:: python
 
