@@ -29,11 +29,13 @@ setup_args = dict(
     python_requires='>=2.7',
     classifiers=[
         'Programming Language :: Python',
-        'Operating System :: Microsoft :: Windows',
-        'Operating System :: Unix',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Operating System :: Unix',
+        'Operating System :: Microsoft :: Windows',
     ],
 )
 
@@ -49,8 +51,15 @@ def get_version():
     return version
 
 
+def get_long_description():
+    with open(os.path.join(CURRDIR, 'README.rst'), 'rb') as f:
+        long_description = f.read().decode('utf-8')
+    return long_description
+
+
 def main():
     setup_args["version"] = get_version()
+    setup_args["long_description"] = get_long_description()
     setup_args["entry_points"] = {
         'console_scripts': [
             'kmailbox=kmailbox:_main',
