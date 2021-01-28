@@ -47,6 +47,7 @@ else:
 if 'ID' not in imaplib.Commands:
     imaplib.Commands['ID'] = ('AUTH', 'NONAUTH')
 
+
 DEFAULT_IMAP_HOST_MAPPING = {
     "gmail.com": "imap.gmail.com",
     "qq.com": "imap.qq.com",
@@ -637,14 +638,16 @@ class Message(object):
 class MailBox(object):
     """邮件收发器"""
 
-    def __init__(self, imap_host=None, smtp_host=None, username=None,
-                 password=None, use_tls=False, use_ssl=False, timeout=60,
-                 logger=None, debug=False):
-        self._imap_host = imap_host  # 接收服务器
-        self._smtp_host = smtp_host  # 发送服务器
+    def __init__(self,
+                 username=None, password=None,
+                 imap_host=None, smtp_host=None,
+                 use_tls=False, use_ssl=False,
+                 timeout=60, logger=None, debug=False):
+        self.username = username or os.getenv("KMAILBOX_USERNAME")
+        self.password = password or os.getenv("KMAILBOX_PASSWORD")
 
-        self.username = username  # 邮箱账号
-        self.password = password  # 邮箱密码
+        self._imap_host = imap_host or os.getenv("KMAILBOX_IMAP_HOST")
+        self._smtp_host = smtp_host or os.getenv("KMAILBOX_SMTP_HOST")
 
         self.use_tls = use_tls
         self.use_ssl = use_ssl
@@ -754,8 +757,8 @@ class MailBox(object):
     def close(self):
         self._close_smtp_server()
         self._close_imap_server()
-        self.username = None
-        self.password = None
+        self._username = None
+        self._password = None
 
     def send(self, message, after_reset_connect=False):
         if not message.sender:
@@ -1063,8 +1066,8 @@ def _main():
 
     args = parser.parse_args()
 
-    username = args.user or os.getenv("KMAILBOX_USER")
-    password = args.password or os.getenv("KMAILBOX_PASSWD")
+    username = args.user or os.getenv("KMAILBOX_USERNAME")
+    password = args.password or os.getenv("KMAILBOX_PASSWORD")
     if not (username and password):
         parser.error(
             "the following arguments are required: -u/--user, -p/--password"
