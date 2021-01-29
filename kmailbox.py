@@ -428,24 +428,29 @@ class Message(object):
     # 附件
     attachments = MessageProperty("attachments")
 
-    def __init__(self, is_received=False):
+    def __init__(self, **kwargs):
+        self.is_html = kwargs.pop("is_html", False)    # 是否为 html 内容邮件
+        self.headers = kwargs.pop("headers", None)     # 邮件头
+        self.charset = kwargs.pop("charset", "utf-8")  # 邮件编码
+
         # 标记是否为接收到的消息，否则为即将要发送的消息
         # 接收的消息与要发送的消息某些字段值的类型可能会不同
-        self.is_received = is_received
+        self.is_received = kwargs.pop("is_received", False)
 
-        self.is_html = False            # 是否为 html 内容的邮件
-        self.headers = None             # 额外的邮件头
-        self.uid = None                 # 邮件唯一标识符
-        self.flags = None               # 邮件标记
-        self.charset = "utf-8"          # 邮件编码
+        # 为接受到的消息时会设置的属性
+        self.uid = kwargs.pop("uid", None)      # 邮件唯一标识符
+        self.flags = kwargs.pop("flags", None)  # 邮件标记
+
+        for name, value in kwargs.items():
+            setattr(self, name, value)
 
         # 底层消息对象，为 email.message.Message 或其子类的对象
         # 用于在解析接收到的邮件消息时记录原始的二进制消息数据
         self._msg = None
 
     def __repr__(self):
-        return "{}(sender={}, subject={})".format(
-            self.__class__.__name__, self.sender, self.subject
+        return "{}(sender='{}', recipient='{}', subject='{}')".format(
+            self.__class__.__name__, self.sender, self.recipient, self.subject
         )
 
     @property

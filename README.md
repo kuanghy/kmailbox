@@ -10,27 +10,29 @@ Python 邮件模块，支持邮件发送与接收。
 ### Message
 
 ```python
-Message(is_received=False)
+Message(**kwargs)
 ```
 
-用于描述邮件内容，参数 `is_received` 用于标记消息是否为从 IMAP 服务器接收到的消息，否则为即将要发送的消息，接收的消息与要发送的消息某些字段值的类型可能会不同。
-
-其对象的属性包括：
+用于描述邮件内容，仅支持关键参数，支持以下的参数（同时也为对象属性）：
 
 - **sender**: 发件人
-- **recipient**: 收件人
+- **recipient**: 收件人（多人时为 list 等序列类型，抄送人、回复人等字段也一样）
 - **cc_recipien**: 抄送人
 - **bcc_recipien**: 暗抄送人
 - **reply_recipient**: 回复收件人
 - **subject**: 主题
 - **content**: 内容
-- **is_html**: 是否为 HTML 内容，否则为文本内容
+- **is_html**: 是否为 HTML 内容，否则为普通文本内容
 - **attachments**: 附件
 - **to_addrs**: 所有收件人地址，包括收件人、抄送人、暗抄送人、回复收件人在内
+- **headers**: 邮件头（为要发送的消息时可用于设置格外头信息）
+- **charset**: 编码
+- **is_received** 用于标记消息是否为从 IMAP 服务器接收到的消息（接收的消息与要发送的消息某些字段值的类型可能会不同）
+
+为接受到的消息时会设置的属性：
+
 - **uid**: 唯一标识
 - **flags**: 标志
-- **headers**: 发件时需要格外设置的邮件头
-- **charset**: 编码
 
 如果邮件内容为 HTML，则需将 is_html 设置为 True。当需要在 HTML 中插入图片、音视频等媒体时，媒体文件路径应该放在 attachments 参数中，并以 `cid + 序号:` 开头，以标记是需要在 HTML 中插入的媒体，如：
 
@@ -103,8 +105,7 @@ MailAttachment(part)
 
 ```python
 MailBox(imap_host=None, smtp_host=None, username=None, password=None,
-    use_tls=False, use_ssl=False, use_plain_auth=False, timeout=60,
-    logger=None)
+        use_tls=False, use_ssl=False, timeout=60, logger=None)
 ```
 
 `imap_host`、`smtp_host` 分别为 imap、smtp 的主机地址，如果需要支持端口号，则用冒号 `:` 分割，如：
@@ -112,6 +113,13 @@ MailBox(imap_host=None, smtp_host=None, username=None, password=None,
 > smtp.gmail.com:25
 
 `use_tls` 表示是否加密邮件，`use_ssl` 表示是否使用 ssl 协议。
+
+参数 imap_host, smtp_host, username, password 可以通过设置环境来自动获取，对应的环境变量值为：
+
+- **KMAILBOX_IMAP_HOST**
+- **KMAILBOX_SMTP_HOST**
+- **KMAILBOX_USERNAME**
+- **KMAILBOX_PASSWORD**
 
 方法说明：
 
@@ -175,8 +183,8 @@ MailBox(imap_host=None, smtp_host=None, username=None, password=None,
 from kmailbox import Message, MailBox
 
 msg = Message()
-sender = "Tester<test@google.com>"
-recipient = "hello@google.com"
+msg.sender = "Tester<test@google.com>"
+msg.recipient = "hello@google.com"
 msg.subject = "kmailbox test"
 msg.content = "This is test"
 
@@ -192,8 +200,8 @@ mailbox.send(msg)
 
 ```python
 msg = Message()
-sender = "Tester<test@google.com>"
-recipient = "hello@google.com"
+msg.sender = "Tester<test@google.com>"
+msg.recipient = "hello@google.com"
 msg.subject = "kmailbox test send html and add attachments"
 msg.is_html = True
 msg.content = """\
@@ -249,51 +257,20 @@ mailbox.logout()
 命令行工具参数如下：
 
 ```
-optional arguments:
-  -h, --help            show this help message and exit
-  -v, --version         Log level (default: info)
-
-basic arguments:
-  --imap IMAP           Email IMAP server
-  --smtp SMTP           Email SMTP server
-  -u USER, --user USER  Email user
-  -p PASSWORD, --password PASSWORD
-                        Email user's password
-  --use-tls             Using TLS connect to server
-  --use-ssl             Using SSL connect to server
-  --timeout TIMEOUT     Timeout, default: 30
-  --select SELECT       Select a mailbox folder, default: INBOX
-  --list                List mailbox folder names
-
-send arguments:
-  --send                Send Mail
-  -f SENDER, --sender SENDER
-                        Mail From
-  -t TO [TO ...], --to TO [TO ...]
-                        Recipients
-  --cc [CC [CC ...]]    Carbon Copy recipients
-  -s SUBJECT, --subject SUBJECT
-                        Mail subject
-  -c CONTENT, --content CONTENT
-                        Mail Content
-  -a [ATTACHMENT [ATTACHMENT ...]], --attachment [ATTACHMENT [ATTACHMENT ...]]
-                        Mail attachments
-
-read arguments:
-  --all                 Read all mails
-  --unread              Read unread mails
-  --recent              Read recent mails
-  --new                 Read new mails
-  --old                 Read old mails
-  --verbose             verbosely display mail message
-  --mark-as-seen        Mark as seen after read the mail
-
-mark arguments:
-  --delete              Delete mails
-  --seen                Mark mails as seen
-  --unseen              Mark mails as unseen
-  --uid UID [UID ...]   Mail id set, e.g. 1,2,3
+usage: kmailbox [-h] [-v] [-d]
+                [--loglevel {debug,info,warning,error,fatal,critical}]
+                [--imap IMAP] [--smtp SMTP] [-u USER] [-p PASSWORD]
+                [--use-tls] [--use-ssl] [--timeout TIMEOUT]
+                [--select SELECT] [--list] [--send] [-f SENDER]
+                [-t TO [TO ...]] [--cc [CC [CC ...]]] [-s SUBJECT]
+                [-c CONTENT] [-a [ATTACHMENT [ATTACHMENT ...]]] [--all]
+                [--unread] [--recent] [--new] [--old] [--verbose]
+                [--mark-as-seen] [--delete] [--seen] [--unseen]
+                [--uid UID [UID ...]]
+                [--relay-to [RELAY_TO [RELAY_TO ...]]]
 ```
+
+详细使用方式可以通过执行 `kmailbox --help` 查看。
 
 ## 参考
 

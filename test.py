@@ -74,9 +74,9 @@ class TestMailBox(object):
             use_ssl=True,
             logger=logger,
         )
-        cls.mailuser = os.environ["KMAILBOX_USER"]
+        cls.mailuser = os.environ["KMAILBOX_USERNAME"]
         cls.mailbox.username = cls.mailuser
-        cls.mailbox.password = os.environ["KMAILBOX_PASSWD"]
+        cls.mailbox.password = os.environ["KMAILBOX_PASSWORD"]
 
         cls.sender = "KMailBox<{}>".format(cls.mailuser)
         cls.recipient = "huayongkuang@qq.com"

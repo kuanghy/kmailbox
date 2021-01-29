@@ -10,8 +10,8 @@ send plain text email:
     from kmailbox import Message, MailBox
 
     msg = Message()
-    sender = "Tester<test@google.com>"
-    recipient = "hello@google.com"
+    msg.sender = "Tester<test@google.com>"
+    msg.recipient = "hello@google.com"
     msg.subject = "kmailbox test"
     msg.content = "This is test"
 
@@ -25,8 +25,8 @@ send html email:
 .. code-block:: python
 
     msg = Message()
-    sender = "Tester<test@google.com>"
-    recipient = "hello@google.com"
+    msg.sender = "Tester<test@google.com>"
+    msg.recipient = "hello@google.com"
     msg.subject = "kmailbox test send html and add attachments"
     msg.is_html = True
     msg.content = """\
