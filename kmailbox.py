@@ -35,7 +35,7 @@ except ImportError:
     from UserString import UserString
 
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 
 if sys.version_info.major > 2:
     string_types = str
