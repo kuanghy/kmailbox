@@ -79,8 +79,8 @@ class TestMailBox(object):
         cls.mailbox.password = os.environ["KMAILBOX_PASSWORD"]
 
         cls.sender = "KMailBox<{}>".format(cls.mailuser)
-        cls.recipient = "huayongkuang@qq.com"
-        # cls.cc_recipient = ["sudohuoty@163.com"]
+        cls.recipient = "huayongkuang@foxmail.com"
+        cls.cc_recipient = [cls.mailuser]
 
     def teardown_class(cls):
         cls.mailbox.close()
@@ -89,13 +89,14 @@ class TestMailBox(object):
         msg = Message()
         msg.sender = self.sender
         msg.recipient = self.recipient
-        # msg.cc_recipient = self.cc_recipient
+        msg.cc_recipient = self.cc_recipient
         return msg
 
     def test_sendmail(self):
         msg = self.create_message()
         msg.subject = "kmailbox test"
         msg.content = "This is test"
+        print(msg.as_string())
         self.mailbox.send(msg)
 
     def test_send_html_mail(self):

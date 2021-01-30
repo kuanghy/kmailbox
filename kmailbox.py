@@ -8,7 +8,6 @@ from __future__ import print_function
 import os
 import sys
 import re
-import time
 import base64
 import logging
 import binascii
@@ -28,6 +27,7 @@ from email.mime.audio import MIMEAudio
 from email.mime.multipart import MIMEMultipart
 from email.header import Header as EmailHeader
 from email.utils import getaddresses as get_email_addr
+from email.utils import formatdate as format_email_date
 
 try:
     from collections import UserString
@@ -50,16 +50,20 @@ if 'ID' not in imaplib.Commands:
 
 DEFAULT_IMAP_HOST_MAPPING = {
     "gmail.com": "imap.gmail.com",
+    "outlook.com": "outlook.office365.com",
     "qq.com": "imap.qq.com",
     "163.com": "imap.163.com",
     "yeah.net": "imap.yeah.net",
+    "139.com": "imap.139.com",
 }
 
 DEFAULT_SMTP_HOST_MAPPING = {
     "gmail.com": "smtp.gmail.com",
+    "outlook.com": "smtp.office365.com:587",
     "qq.com": "smtp.qq.com",
     "163.com": "smtp.163.com",
     "yeah.net": "smtp.yeah.net",
+    "139.com": "smtp.139.com",
 }
 
 
@@ -471,7 +475,7 @@ class Message(object):
     def __set_headers(self, msg=None):
         msg = msg or MIMEMultipart()
 
-        msg['Date'] = time.strftime("%Y-%m-%d %H:%M:%S %a", time.localtime())
+        msg['Date'] = format_email_date(localtime=True)
         msg['Subject'] = self.subject
         msg['From'] = self.sender
 
