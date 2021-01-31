@@ -26,8 +26,12 @@ from email.mime.image import MIMEImage
 from email.mime.audio import MIMEAudio
 from email.mime.multipart import MIMEMultipart
 from email.header import Header as EmailHeader
-from email.utils import getaddresses as get_email_addr
-from email.utils import formatdate as format_email_date
+from email.utils import (
+    getaddresses as get_email_addr,
+    formatdate as format_email_date,
+    parseaddr as parse_email_addr,
+    formataddr as format_email_addr,
+)
 
 try:
     from collections import UserString
@@ -472,12 +476,17 @@ class Message(object):
                 addrs.extend(list(recp))
         return addrs
 
+    def __format_email_addr(self, addr):
+        realname, email_address = parse_email_addr(addr)
+        realname = EmailHeader(realname, self.charset).encode()
+        return format_email_addr((realname, email_address))
+
     def __set_headers(self, msg=None):
         msg = msg or MIMEMultipart()
-
         msg['Date'] = format_email_date(localtime=True)
-        msg['Subject'] = self.subject
-        msg['From'] = self.sender
+        msg['Subject'] = EmailHeader(self.subject, self.charset).encode()
+        msg['From'] = self.__format_email_addr(self.sender)
+        # msg['From'] = self.sender.encode(self.charset)
 
         recipient_mapping = {
             "To": self.recipient,
@@ -489,16 +498,15 @@ class Message(object):
             if not recp:
                 continue
             if isinstance(recp, string_types):
-                msg[hname] = recp
+                msg[hname] = self.__format_email_addr(recp)
             else:
-                msg[hname] = ";".join(list(recp))
+                msg[hname] = "; ".join([
+                    self.__format_email_addr(addr) for addr in recp
+                ])
 
         if self.headers:
             for key, value in self.headers.items():
-                if isinstance(value, bytes):
-                    msg[key] = value.decode(self.charset)
-                else:
-                    msg[key] = value
+                msg[key] = EmailHeader(value, self.charset).encode()
 
         return msg
 
