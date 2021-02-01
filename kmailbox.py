@@ -486,7 +486,6 @@ class Message(object):
         msg['Date'] = format_email_date(localtime=True)
         msg['Subject'] = EmailHeader(self.subject, self.charset).encode()
         msg['From'] = self.__format_email_addr(self.sender)
-        # msg['From'] = self.sender.encode(self.charset)
 
         recipient_mapping = {
             "To": self.recipient,
