@@ -45,7 +45,7 @@ if sys.version_info.major > 2:
     string_types = str
     binary_types = bytes
 else:
-    string_types = basestring
+    string_types = basestring  # noqa
     binary_types = str
 
 if 'ID' not in imaplib.Commands:
@@ -921,7 +921,7 @@ class MailBox(object):
 
     @staticmethod
     def _cleaned_uid_set(uid_set):
-        """转换 uid 结合
+        """转换 uid 集合
 
         Uid 集合可以是: 字符串(可以逗号分隔)，可迭代的对象
         """
