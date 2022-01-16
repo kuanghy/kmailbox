@@ -24,10 +24,10 @@ def main():
     )
     box.login(os.environ["KMAILBOX_USER"], os.environ["KMAILBOX_PASSWD"])
     box.select()
-    # id_list = box._search('FROM "{}"'.format("kuanghuayong@joinquant.com"))
+    # id_list = box._search('FROM "{}"'.format("test@mail.com"))
     from pprint import pprint
     # for mail in box.all(mark_seen=False, gen=True):
-    for mail in box.from_criteria("kuanghuayong@joinquant.com", mark_seen=False, gen=True):
+    for mail in box.from_criteria("test@mail.com", mark_seen=False, gen=True):
         pprint({
             "uid": mail.uid,
             "sender": mail.sender,

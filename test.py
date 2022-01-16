@@ -126,7 +126,7 @@ class TestMailBox(object):
         mails = self.mailbox.all(mark_seen=False)
         # mails = self.mailbox.unread(mark_seen=False)
         # mails = self.mailbox.new(mark_seen=False)
-        # mails = self.mailbox.from_criteria("konitor@yeah.net", mark_seen=False)
+        # mails = self.mailbox.from_criteria("test@mail.net", mark_seen=False)
         print(mails)
         pprint([{
             "uid": mail.uid,
@@ -148,7 +148,7 @@ class TestMailBox(object):
 
     def test_delete_mail(self):
         self.mailbox.select()
-        self.mailbox.mark_as_delete("1384335845,1384335844")
+        self.mailbox.mark_as_delete("1384335845, 1384335844")
         self.mailbox.expunge()
 
     def test_download_attachment(self):
@@ -159,3 +159,8 @@ class TestMailBox(object):
             for att in mail.attachments:
                 att.download(os.path.expanduser("~/Temp"))
                 print("download attachment '%s'" % att.filename)
+
+    def test_move_mails(self):
+        print("Folders:", self.mailbox.folders)
+        self.mailbox.select()
+        self.mailbox.move("test", criterions='TO "test@mail.com"')

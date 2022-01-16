@@ -39,7 +39,7 @@ except ImportError:
     from UserString import UserString
 
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 
 if sys.version_info.major > 2:
     string_types = str
@@ -56,6 +56,7 @@ DEFAULT_IMAP_HOST_MAPPING = {
     "gmail.com": "imap.gmail.com",
     "outlook.com": "outlook.office365.com",
     "qq.com": "imap.qq.com",
+    "foxmail.com": "imap.qq.com",
     "163.com": "imap.163.com",
     "yeah.net": "imap.yeah.net",
     "139.com": "imap.139.com",
@@ -65,6 +66,7 @@ DEFAULT_SMTP_HOST_MAPPING = {
     "gmail.com": "smtp.gmail.com",
     "outlook.com": "smtp.office365.com:587",
     "qq.com": "smtp.qq.com",
+    "foxmail.com": "smtp.qq.com",
     "163.com": "smtp.163.com",
     "yeah.net": "smtp.yeah.net",
     "139.com": "smtp.139.com",
@@ -305,8 +307,14 @@ class MessageProperty(object):
             result.append(MailAddress(_decode_email_header(data.encode())))
         elif data:
             for raw_name, address in get_email_addr([data]):
-                name = _decode_email_header(raw_name).strip()
-                address = address.strip()
+                try:
+                    name = _decode_email_header(raw_name).strip()
+                except Exception:
+                    name = raw_name
+                try:
+                    address = _decode_email_header(address).strip()
+                except Exception:
+                    address = address
                 if not address:
                     continue
                 result.append(MailAddress(address, name))
@@ -314,7 +322,9 @@ class MessageProperty(object):
 
     @staticmethod
     def _fetch_date(obj):
-        value = obj._msg.get('Date', '')
+        value = obj._msg.get('Date')
+        if not value:
+            value = obj._msg.get('Received', '')
         short_month_names = ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                              'Jul', 'Aug', 'Sep', 'Oct', 'Nov', "Dec")
         match = re.search((
@@ -342,7 +352,7 @@ class MessageProperty(object):
                 )) if zone else None,
             )
         else:
-            return datetime.datetime(1900, 1, 1)
+            return datetime.datetime.min
 
     @staticmethod
     def _fetch_content(obj):
@@ -457,8 +467,12 @@ class Message(object):
         self._msg = None
 
     def __repr__(self):
-        return "{}(sender='{}', recipient='{}', subject='{}')".format(
-            self.__class__.__name__, self.sender, self.recipient, self.subject
+        return "{}(subject={!r}, sender={!r}, date='{}', content={!r})".format(
+            self.__class__.__name__,
+            _shorten_text(self.subject, 30),
+            self.sender,
+            self.date,
+            _shorten_text(self.content, 50),
         )
 
     @property
@@ -915,12 +929,13 @@ class MailBox(object):
         return self.fetch_messages(self._search("OLD"), mark_seen, gen)
 
     def from_criteria(self, criteria, mark_seen=True, gen=False):
+        """按发件人搜索邮件"""
         return self.fetch_messages(
             self._search('FROM "{}"'.format(criteria)), mark_seen, gen
         )
 
     @staticmethod
-    def _cleaned_uid_set(uid_set):
+    def _clean_uid_set(uid_set):
         """转换 uid 集合
 
         Uid 集合可以是: 字符串(可以逗号分隔)，可迭代的对象
@@ -950,10 +965,10 @@ class MailBox(object):
 
         参数 value 值为 True 时表示设置标志，否则为取消
         """
-        uid_str = self._cleaned_uid_set(uid_set)
+        uid_str = self._clean_uid_set(uid_set)
         if not uid_str:
             return None
-        if isinstance(uid_set, string_types):
+        if isinstance(flag_set, string_types):
             flag_set = [flag_set]
         store_result = self.imap_server.uid(
             'STORE', uid_str, ('+' if value else '-') + 'FLAGS',
@@ -979,6 +994,23 @@ class MailBox(object):
     def mark_as_unseen(self, uid_set):
         """标记邮件为未读"""
         return self.flag(uid_set, MailFlag.SEEN, False)
+
+    def move(self, to_folder, criterions=None, on_condition_what=None):
+        """移动邮件到指定目录"""
+        if on_condition_what and not callable(on_condition_what):
+            raise Exception("on_condition_what must be a callable object")
+        if criterions:
+            msgs = self.fetch_messages(
+                self._search(criterions), mark_seen=False, gen=True
+            )
+        else:
+            msgs = self.new(mark_seen=False, gen=True)
+        for msg in msgs:
+            if on_condition_what and not on_condition_what(msg):
+                continue
+            self.imap_server.copy(msg.uid, imap_utf7.encode(to_folder))
+            self.mark_as_delete(msg.uid)
+            self._log.info("Move %s to %s", msg, to_folder)
 
     def relay(self, to_addrs, criterions=None, on_condition_what=None):
         """邮件转发"""
