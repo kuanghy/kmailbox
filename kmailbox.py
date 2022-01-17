@@ -794,7 +794,9 @@ class MailBox(object):
         if not message.sender:
             message.sender = self.username
         self._log.info("Sending email to %s", message.to_addrs)
-        self.smtp_server.sendmail(message.sender, message.to_addrs, message.as_string())
+        self.smtp_server.sendmail(message.sender,
+                                  message.to_addrs,
+                                  message.as_string())
         self._log.info("Send mail is successful")
         if after_reset_connect:
             self._close_smtp_server()
@@ -892,6 +894,13 @@ class MailBox(object):
             mail_list = data[0].split()
         return mail_list
 
+    def _fetch_single_message(self, msg_num, msg_parts):
+        try:
+            raw_msg = self._imap_command('fetch', msg_num, msg_parts)
+            return Message(is_received=True).from_raw_message_data(raw_msg)
+        except Exception as ex:
+            self._log.error("Fetch %r message error: %s", msg_num, ex)
+
     def fetch_messages(self, msg_set, mark_seen=True, gen=False):
         """使用 RFC822 电子邮件的标准格式下载邮件
 
@@ -901,9 +910,8 @@ class MailBox(object):
         """
         msg_parts = ("(BODY[] UID FLAGS)" if mark_seen
                      else "(BODY.PEEK[] UID FLAGS)")
-        msg_gen = (Message(is_received=True).from_raw_message_data(
-            self._imap_command('fetch', num, msg_parts)
-        ) for num in msg_set)
+        msg_gen = (self._fetch_single_message(num, msg_parts)
+                   for num in msg_set)
         return msg_gen if gen else list(msg_gen)
 
     def fetch_uids(self, msg_set, gen=False):
@@ -1005,12 +1013,18 @@ class MailBox(object):
             )
         else:
             msgs = self.new(mark_seen=False, gen=True)
+        encoded_to_folder = imap_utf7.encode(to_folder)
         for msg in msgs:
-            if on_condition_what and not on_condition_what(msg):
+            if not msg or (on_condition_what and not on_condition_what(msg)):
                 continue
-            self.imap_server.copy(msg.uid, imap_utf7.encode(to_folder))
-            self.mark_as_delete(msg.uid)
-            self._log.info("Move %s to %s", msg, to_folder)
+            ret = self.imap_server.uid('COPY', msg.uid, encoded_to_folder)
+            if ret[0] == 'OK':
+                self.mark_as_delete(msg.uid)
+                self.expunge()
+                self._log.info("Move %s to %r done", msg, to_folder)
+            else:
+                self._log.error("Move %s to %r error: %s",
+                                msg, to_folder, ret[1])
 
     def relay(self, to_addrs, criterions=None, on_condition_what=None):
         """邮件转发"""
