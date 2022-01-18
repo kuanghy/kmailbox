@@ -787,8 +787,6 @@ class MailBox(object):
     def close(self):
         self._close_smtp_server()
         self._close_imap_server()
-        self._username = None
-        self._password = None
 
     def send(self, message, after_reset_connect=False):
         if not message.sender:
@@ -899,7 +897,8 @@ class MailBox(object):
             raw_msg = self._imap_command('fetch', msg_num, msg_parts)
             return Message(is_received=True).from_raw_message_data(raw_msg)
         except Exception as ex:
-            self._log.error("Fetch %r message error: %s", msg_num, ex)
+            self._log.error("Fetch %r message error: %s, raw_msg: %s",
+                            msg_num, ex, raw_msg)
 
     def fetch_messages(self, msg_set, mark_seen=True, gen=False):
         """使用 RFC822 电子邮件的标准格式下载邮件
@@ -1009,11 +1008,11 @@ class MailBox(object):
             raise Exception("on_condition_what must be a callable object")
         if criterions:
             msgs = self.fetch_messages(
-                self._search(criterions), mark_seen=False, gen=True
+                self._search(criterions), mark_seen=False, gen=False
             )
         else:
-            msgs = self.new(mark_seen=False, gen=True)
-        encoded_to_folder = imap_utf7.encode(to_folder)
+            msgs = self.new(mark_seen=False, gen=False)
+        encoded_to_folder = self._encode_folder(to_folder)
         for msg in msgs:
             if not msg or (on_condition_what and not on_condition_what(msg)):
                 continue
