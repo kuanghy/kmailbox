@@ -762,8 +762,8 @@ class MailBox(object):
         typ, data = response[0], response[1]
         if typ == expected:
             if command:
-                self._log.info("%s was successful, sign as '%s'",
-                               command.upper(), typ)
+                self._log.debug("%s was successful, sign as '%s'",
+                                command.upper(), typ)
             return data
         err_str = "Unexpected response status '{}', data: {}".format(typ, data)
         if command:
