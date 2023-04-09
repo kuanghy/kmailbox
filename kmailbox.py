@@ -850,31 +850,33 @@ class MailBox(object):
         """搜索邮件
 
         常用 criterion 字段：
-            ALL：所有邮件
-            ANSWERED：已回复的邮件
-            BODY <string>：在邮件的主体域包含有指定字符串的邮件
-            CC <string>：在信封结构的抄送人域包含有指定字符串的邮件
-            DELETED：已删除的邮件
-            DRAFT：草稿邮件
-            FLAGGED：被标记的邮件
-            FROM <string>：在信封结构的发件人域包含有指定字符串的邮件
-            KEYWORD <flag>：带有指定关键词标记位的邮件
-            NEW：新邮件，在功能上等效于“(RECENT UNSEEN)”
-            NOT <search-key>：不符合指定检索关键词的邮件
-            OLD：旧邮件，在功能上等效于“NOT RECENT”（与“NOT NEW”相反）
-            ON <date>：实际日期（忽视时间和时区）在指定日期的邮件
-            OR <search-key1> <search-key2>：符合任意一个检索关键词的邮件
-            RECENT：最近到达的邮件
-            SEEN：已读邮件
-            SUBJECT <string>：在信封结构的标题域含有指定字符串的邮件
-            TEXT <string>：在邮件的头部或者主体含有指定字符串的邮件
-            TO <string>：在信封结构的收件人域含有指定字符串的邮件
-            UNANSWERED：未回复的邮件
-            UNDELETED：未删除的邮件
-            UNDRAFT：不带有 /Draft 标记位的邮件
-            UNFLAGGED：未被标记的邮件
-            UNKEYWORD <flag>：不带有指定关键词标记位的邮件
-            UNSEEN：未读邮件
+            ALL: 所有邮件
+            ANSWERED: 已回复的邮件
+            BODY <string>: 在邮件的主体域包含有指定字符串的邮件
+            CC <string>: 在信封结构的抄送人域包含有指定字符串的邮件
+            DELETED: 已删除的邮件
+            DRAFT: 草稿邮件
+            FLAGGED: 被标记的邮件
+            FROM <string>: 在信封结构的发件人域包含有指定字符串的邮件
+            KEYWORD <flag>: 带有指定关键词标记位的邮件
+            NEW: 新邮件，在功能上等效于“(RECENT UNSEEN)”
+            NOT <search-key>: 不符合指定检索关键词的邮件
+            OLD: 旧邮件, 在功能上等效于“NOT RECENT”（与 "NOT NEW" 相反）
+            OR <search-key1> <search-key2>: 符合任意一个检索关键词的邮件
+            ON <date>: 实际日期（忽视时间和时区）在指定日期的邮件
+            BEFORE <date>: 在指定日期之前的邮件
+            SINCE <date>: 在指定日期之后的邮件
+            RECENT: 最近到达的邮件
+            SEEN: 已读邮件
+            SUBJECT <string>: 在信封结构的标题域含有指定字符串的邮件
+            TEXT <string>: 在邮件的头部或者主体含有指定字符串的邮件
+            TO <string>: 在信封结构的收件人域含有指定字符串的邮件
+            UNANSWERED: 未回复的邮件
+            UNDELETED: 未删除的邮件
+            UNDRAFT: 不带有 /Draft 标记位的邮件
+            UNFLAGGED: 未被标记的邮件
+            UNKEYWORD <flag>: 不带有指定关键词标记位的邮件
+            UNSEEN: 未读邮件
 
         Criterion 示例，获取未读且标题中带 hello 的邮件："(UNSEEN SUBJECT 'hello')"
 
