@@ -93,7 +93,7 @@ def _get_default_smtp_host(email_address):
     return DEFAULT_SMTP_HOST_MAPPING.get(email_domain)
 
 
-def _decode_string(data, encoding="uft-8"):
+def _decode_string(data, encoding="utf-8"):
     if isinstance(data, binary_types):
         try:
             return data.decode(encoding or 'utf-8', 'ignore')
@@ -115,8 +115,12 @@ def _shorten_sequence_string(sequence, max_len=3, placeholder="..."):
 
 
 def _decode_email_header(header):
-    data, encoding = decode_header(header)[0]
-    return _decode_string(data, encoding)
+    if header is None:
+        return None
+    parts = []
+    for data, encoding in decode_header(header):
+        parts.append(_decode_string(data, encoding))
+    return ''.join(parts)
 
 
 class UnexpectedCommandStatusError(Exception):
@@ -214,7 +218,7 @@ class MailAddress(UserString):
     def __init__(self, address, name=None):
         match = re.match(self._addr_pattern, address)
         if match:
-            self.name, self.address = match.groups()
+            self.name, self.address = [s.strip() for s in match.groups()]
             self.data = address
         else:
             self.address = address
@@ -296,10 +300,6 @@ class MessageProperty(object):
     def __init__(self, name, default=None):
         self.name = name
         self.default = default
-
-    def _decode_header(self, header):
-        data, encoding = decode_header(header)[0]
-        return _decode_string(data, encoding)
 
     def _parse_addr(self, data):
         result = []
@@ -389,7 +389,8 @@ class MessageProperty(object):
         else:
             if self.name == "sender":
                 name = 'From'
-                sender = self._parse_addr(obj._msg.get(name, self.default))[0]
+                addrs = self._parse_addr(obj._msg.get(name, self.default))
+                sender = addrs[0] if addrs else self.default
                 obj.__dict__[self.name] = sender
                 return sender
             elif self.name == "subject":
@@ -467,12 +468,14 @@ class Message(object):
         self._msg = None
 
     def __repr__(self):
+        subject = self.subject or ''
+        content = self.content or ''
         return "{}(subject={!r}, sender={!r}, date='{}', content={!r})".format(
             self.__class__.__name__,
-            _shorten_text(self.subject, 30),
+            _shorten_text(subject, 30),
             self.sender,
             self.date,
-            _shorten_text(self.content, 50),
+            _shorten_text(content, 50),
         )
 
     @property
@@ -555,7 +558,8 @@ class Message(object):
             with open(attachment, 'rb') as fp:
                 content = fp.read()
             if maintype == "text":
-                att = MIMEText(content, _subtype=subtype, _charset=self.charset)
+                text = _decode_string(content, self.charset)
+                att = MIMEText(text, _subtype=subtype, _charset=self.charset)
             elif maintype == "image":
                 att = MIMEImage(content, _subtype=subtype)
             elif maintype == "audio":
@@ -576,9 +580,11 @@ class Message(object):
         return msg
 
     def as_string(self):
-        if self._msg:                    # 为接收到的邮件消息
-            return self._msg.as_string()
-        elif not self.is_received:       # 为要发送的邮件消息
+        if self.is_received:             # 为接收到的邮件消息
+            if self._msg:
+                return self._msg.as_string()
+            return None
+        else:                            # 为要发送的邮件消息
             msg = self.__set_headers()   # 设置邮件头信息
             msg.attach(MIMEText(
                 self.content,
@@ -586,10 +592,7 @@ class Message(object):
                 _charset=self.charset
             ))                           # 添加正文内容
             self.__set_attachments(msg)  # 添加附件
-            self._msg = msg
             return msg.as_string()
-        else:
-            return None
 
     def from_string(self, data):
         self._msg = email.message_from_string(data)
@@ -600,14 +603,16 @@ class Message(object):
         return self
 
     def uid_from_string(self, data):
+        uid = None
         if isinstance(data, binary_types):
             data = data.decode("utf-8")
-        uid_match = re.search(r'UID\s+(?P<uid>\d+)', data)
-        if uid_match:
+        if isinstance(data, string_types):
             # zimbra, yandex, gmail, gmx
-            uid = uid_match.group('uid')
+            uid_match = re.search(r'UID\s+(?P<uid>\d+)', data)
+            if uid_match:
+                uid = uid_match.group('uid')
         else:
-            # mail.ru, ms exchange server
+            # mail.ru, ms exchange server - data 为列表形式
             re_pattern = r'(^|\s+)UID\s+(?P<uid>\d+)($|\s+)'
             for raw_flag_item in data:
                 uid_flag_match = re.search(
@@ -615,6 +620,7 @@ class Message(object):
                 )
                 if uid_flag_match:
                     uid = uid_flag_match.group('uid')
+                    break
         self.uid = uid
         return uid
 
@@ -655,13 +661,8 @@ class Message(object):
             raw_uid_or_flag_data = b' '.join(raw_uid_or_flag_data)
         except TypeError:
             raw_uid_or_flag_data = ' '.join(raw_uid_or_flag_data)
-        try:
-            self.uid_from_string(raw_uid_or_flag_data)
-            self.flag_from_string([raw_uid_or_flag_data])
-        except Exception:
-            print("-" * 120)
-            print(data)
-            print("-" * 120)
+        self.uid_from_string(raw_uid_or_flag_data)
+        self.flag_from_string([raw_uid_or_flag_data])
         return self
 
 
@@ -687,6 +688,9 @@ class MailBox(object):
         self._smtp_server = None
         self._imap_server = None
 
+        self._parsed_imap_host = None
+        self._parsed_smtp_host = None
+
         if not logger:
             logger = logging.getLogger("kmailbox")
             logger.addHandler(logging.NullHandler())
@@ -697,29 +701,33 @@ class MailBox(object):
 
     @property
     def imap_host(self):
-        host = self._imap_host or _get_default_imap_host(self.username)
-        if not host:
-            return None
-
-        if ':' in host:
-            host, port = host.rsplit(':', 1)
-            port = int(port)
-        else:
-            port = imaplib.IMAP4_SSL_PORT if self.use_ssl else imaplib.IMAP4_PORT
-        return host, port
+        if self._parsed_imap_host is None:
+            host = self._imap_host or _get_default_imap_host(self.username)
+            if not host:
+                return None
+            if ':' in host:
+                host, port = host.rsplit(':', 1)
+                port = int(port)
+            else:
+                port = (imaplib.IMAP4_SSL_PORT if self.use_ssl
+                        else imaplib.IMAP4_PORT)
+            self._parsed_imap_host = (host, port)
+        return self._parsed_imap_host
 
     @property
     def smtp_host(self):
-        host = self._smtp_host or _get_default_smtp_host(self.username)
-        if not host:
-            return None
-
-        if ':' in host:
-            host, port = host.rsplit(':', 1)
-            port = int(port)
-        else:
-            port = smtplib.SMTP_SSL_PORT if self.use_ssl else smtplib.SMTP_PORT
-        return host, port
+        if self._parsed_smtp_host is None:
+            host = self._smtp_host or _get_default_smtp_host(self.username)
+            if not host:
+                return None
+            if ':' in host:
+                host, port = host.rsplit(':', 1)
+                port = int(port)
+            else:
+                port = (smtplib.SMTP_SSL_PORT if self.use_ssl
+                        else smtplib.SMTP_PORT)
+            self._parsed_smtp_host = (host, port)
+        return self._parsed_smtp_host
 
     @property
     def imap_server(self):
@@ -749,7 +757,6 @@ class MailBox(object):
                 server.set_debuglevel(1)
             self._log.debug("Using '%s' login to %s",
                             self.username, self.smtp_host)
-            server.connect(*self.smtp_host)
             server.ehlo()
             if not self.use_ssl and self.use_tls:
                 server.starttls()
@@ -773,16 +780,25 @@ class MailBox(object):
     def _close_smtp_server(self):
         if not self._smtp_server:
             return
-        self._smtp_server.quit()
-        self._smtp_server = None
+        try:
+            self._smtp_server.quit()
+        except Exception:
+            pass
+        finally:
+            self._smtp_server = None
 
     def _close_imap_server(self):
         if not self._imap_server:
             return
-        self._imap_server.close()
-        res = self._imap_server.logout()
-        self._check_command_response(res, expected="BYE", command="logout")
-        self._imap_server = None
+        try:
+            self._imap_server.close()
+        except Exception:
+            pass
+        try:
+            res = self._imap_server.logout()
+            self._check_command_response(res, expected="BYE", command="logout")
+        finally:
+            self._imap_server = None
 
     def close(self):
         self._close_smtp_server()
@@ -895,6 +911,7 @@ class MailBox(object):
         return mail_list
 
     def _fetch_single_message(self, msg_num, msg_parts):
+        raw_msg = None
         try:
             raw_msg = self._imap_command('fetch', msg_num, msg_parts)
             return Message(is_received=True).from_raw_message_data(raw_msg)
@@ -983,7 +1000,7 @@ class MailBox(object):
             'STORE', uid_str, ('+' if value else '-') + 'FLAGS',
             '({})'.format(' '.join(('\\' + item for item in flag_set)))
         )
-        self._log.info("Falg %s (value=%r) for %s",
+        self._log.info("Flag %s (value=%r) for %s",
                        flag_set, value, _shorten_text(uid_str))
         data = self._check_command_response(store_result)
         return data
@@ -1038,7 +1055,7 @@ class MailBox(object):
         else:
             msgs = self.new(mark_seen=False, gen=True)
         for msg in msgs:
-            if on_condition_what and not on_condition_what(msg):
+            if not msg or (on_condition_what and not on_condition_what(msg)):
                 continue
             self.smtp_server.sendmail(self.username, to_addrs, msg.as_string())
             self._log.info("Relay %s to %s", msg, to_addrs)
@@ -1067,7 +1084,7 @@ def _main():
     create_argument(parser, "--loglevel",
                     choices=["debug", "info", "warning", "error", "fatal",
                              "critical"],
-                    help="Set log level and enbale logger")
+                    help="Set log level and enable logger")
 
     basic_group = parser.add_argument_group(title="basic arguments")
     create_argument(basic_group, "--imap", help="Email IMAP server")
@@ -1190,6 +1207,8 @@ def _main():
 
     def display_mails(fetch_func):
         for mail in fetch_func(mark_seen=args.mark_as_seen, gen=True):
+            if not mail:
+                continue
             print("========", _shorten_text(mail.subject, 60), "========")
             print("Sender:", mail.sender)
             print("Date:", mail.date)
