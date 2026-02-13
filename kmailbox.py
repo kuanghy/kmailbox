@@ -1045,20 +1045,43 @@ class MailBox(object):
                                 msg, to_folder, ret[1])
 
     def relay(self, to_addrs, criterions=None, on_condition_what=None):
-        """邮件转发"""
+        """自动转发邮件
+
+        类似邮箱的自动转发功能，将收到的邮件原样转发到指定地址
+
+        参数:
+            to_addrs: 转发目标地址，字符串或列表
+            criterions: 邮件搜索条件，字符串或列表
+            on_condition_what: 条件过滤函数，接收 Message 对象，返回 True 则转发
+
+        返回:
+            (relayed, failed) 元组，分别为成功和失败的邮件数
+        """
         if on_condition_what and not callable(on_condition_what):
-            raise Exception("on_condition_what must be a callable object")
+            raise TypeError("on_condition_what must be a callable object")
         if criterions:
-            msgs = self.fetch_messages(
-                self._search(criterions), mark_seen=False, gen=True
-            )
+            if isinstance(criterions, (list, tuple)):
+                msg_set = self._search(*criterions)
+            else:
+                msg_set = self._search(criterions)
+            msgs = self.fetch_messages(msg_set, mark_seen=False, gen=True)
         else:
             msgs = self.new(mark_seen=False, gen=True)
+        relayed, failed = 0, 0
         for msg in msgs:
             if not msg or (on_condition_what and not on_condition_what(msg)):
                 continue
-            self.smtp_server.sendmail(self.username, to_addrs, msg.as_string())
-            self._log.info("Relay %s to %s", msg, to_addrs)
+            try:
+                self.smtp_server.sendmail(
+                    self.username, to_addrs, msg.as_string()
+                )
+                relayed += 1
+                self._log.info("Relay %s to %s", msg, to_addrs)
+            except Exception as ex:
+                failed += 1
+                self._log.error("Relay %s to %s failed: %s",
+                                msg, to_addrs, ex)
+        return relayed, failed
 
     def __enter__(self):
         return self
