@@ -17,19 +17,19 @@ Message(**kwargs)
 
 - **sender**: 发件人
 - **recipient**: 收件人（多人时为 list 等序列类型，抄送人、回复人等字段也一样）
-- **cc_recipien**: 抄送人
-- **bcc_recipien**: 暗抄送人
+- **cc_recipient**: 抄送人
+- **bcc_recipient**: 暗抄送人
 - **reply_recipient**: 回复收件人
 - **subject**: 主题
 - **content**: 内容
 - **is_html**: 是否为 HTML 内容，否则为普通文本内容
 - **attachments**: 附件
 - **to_addrs**: 所有收件人地址，包括收件人、抄送人、暗抄送人、回复收件人在内
-- **headers**: 邮件头（为要发送的消息时可用于设置格外头信息）
+- **headers**: 邮件头（为要发送的消息时可用于设置额外头信息）
 - **charset**: 编码
 - **is_received** 用于标记消息是否为从 IMAP 服务器接收到的消息（接收的消息与要发送的消息某些字段值的类型可能会不同）
 
-为接受到的消息时会设置的属性：
+为接收到的消息时会设置的属性：
 
 - **uid**: 唯一标识
 - **flags**: 标志
@@ -44,7 +44,7 @@ Message(**kwargs)
 - **from_string**: 从文本字符串中获取消息并转化
 - **from_bytes**: 从二进制中获取消息并转化
 - **uid_from_string**: 从字符串中获取 UID
-- **flag_from_string**: 从字符串中国获取 Flag
+- **flag_from_string**: 从字符串中获取 Flag
 - **from_raw_message_data**: 从原始的消息数据中获取消息并转化
 
 ### MailFlag
@@ -89,7 +89,7 @@ MailAddress(address, name=None)
 MailAttachment(part)
 ```
 
-用户描述邮件附件，参数 part 为一个 multipart 对象。
+用于描述邮件附件，参数 part 为一个 multipart 对象。
 
 其对象包含以下只读属性：
 
@@ -226,8 +226,8 @@ msg.attachments = [
 mailbox = MailBox(
     smtp_host="smtp.gmail.com",
     use_ssl=True,
-    username="username"
-    password="password"
+    username="username",
+    password="password",
 )
 mailbox.send(msg)
 ```
@@ -239,7 +239,7 @@ mailbox = MailBox(imap_host="imap.gmail.com", use_ssl=True)
 mailbox.username = "username"
 mailbox.password = "password"
 mailbox.select()
-for mail mailbox.all(mark_seen=False, gen=True)
+for mail in mailbox.all(mark_seen=False, gen=True):
     pprint({
         "uid": mail.uid,
         "sender": mail.sender,
@@ -249,7 +249,7 @@ for mail mailbox.all(mark_seen=False, gen=True)
         "flags": mail.flags,
         "attachments": [att.filename for att in mail.attachments],
     })
-mailbox.logout()
+mailbox.close()
 ```
 
 ## 命令行工具

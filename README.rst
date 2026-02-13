@@ -1,7 +1,7 @@
 KMailBox
 ========
 
-**kmailbox** is a python email library, support for sending and receiving emails via SMTP and IMAP protocol。
+**kmailbox** is a python email library, support for sending and receiving emails via SMTP and IMAP protocol.
 
 send plain text email:
 
@@ -51,8 +51,8 @@ send html email:
     mailbox = MailBox(
         smtp_host="smtp.gmail.com",
         use_ssl=True,
-        username="username"
-        password="password"
+        username="username",
+        password="password",
     )
     mailbox.send(msg)
 
@@ -64,7 +64,7 @@ receive mails:
     mailbox.username = "username"
     mailbox.password = "password"
     mailbox.select()
-    for mail mailbox.all(mark_seen=False, gen=True)
+    for mail in mailbox.all(mark_seen=False, gen=True):
         pprint({
             "uid": mail.uid,
             "sender": mail.sender,
@@ -74,4 +74,4 @@ receive mails:
             "flags": mail.flags,
             "attachments": [att.filename for att in mail.attachments],
         })
-    mailbox.logout()
+    mailbox.close()
